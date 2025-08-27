@@ -42,7 +42,7 @@ class ProductListCreateAPIView(ListCreateAPIView):
     filter_backends = [DjangoFilterBackend]
     filterset_class = ProductFilter
 
-    def get_queryset(  # type: ignore
+    def get_queryset(
         self,
     ):
         """
@@ -72,7 +72,7 @@ class ProductListCreateAPIView(ListCreateAPIView):
         product = serializer.save(user=self.request.user, status=3)
 
         # 获取当前创建商品的用户（卖家）
-        seller = self.request.user_id
+        seller = self.request.user
 
         # 查询所有关注该卖家的用户
         followers = Follow.objects.filter(followee=seller).values_list(
@@ -161,7 +161,7 @@ class ProductMediaListView(APIView):
             product = Product.objects.get(product_id=product_id)
 
             # 检查用户是否有权限
-            if request.user != product.user_id:
+            if request.user != product.user:
                 return Response(
                     {"detail": "您没有权限修改此商品"}, status=status.HTTP_403_FORBIDDEN
                 )
@@ -228,7 +228,7 @@ class ProductMediaDetailView(APIView):
             product = Product.objects.get(product_id=product_id)
 
             # 检查用户是否有权限
-            if request.user != product.user_id:
+            if request.user != product.user:
                 return Response(
                     {"detail": "您没有权限修改此商品"}, status=status.HTTP_403_FORBIDDEN
                 )
@@ -256,7 +256,7 @@ class ProductMediaDetailView(APIView):
             product = Product.objects.get(product_id=product_id)
 
             # 检查用户是否有权限
-            if request.user != product.user_id:
+            if request.user != product.user:
                 return Response(
                     {"detail": "您没有权限修改此商品"}, status=status.HTTP_403_FORBIDDEN
                 )
@@ -299,7 +299,7 @@ class ProductMediaBulkUpdateView(APIView):
             product = Product.objects.get(product_id=product_id)
 
             # 权限验证
-            if request.user != product.user_id:
+            if request.user != product.user:
                 return Response(
                     {"detail": "无权操作此商品"}, status=status.HTTP_403_FORBIDDEN
                 )
