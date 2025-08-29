@@ -49,6 +49,7 @@ class Product(models.Model):
     rating_avg = models.DecimalField(
         max_digits=2, decimal_places=1, default=0.0, help_text="平均评分"
     )
+    stock = models.PositiveIntegerField(default=1, help_text="库存数量")
 
     class Meta:
         db_table = "product"

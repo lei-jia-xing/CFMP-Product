@@ -69,5 +69,11 @@ urlpatterns = [
         "product/publish/",
         views.ProductPublishListAPIView.as_view(),
         name="product-publish-list",
-    )
+    ),
+    # 库存管理相关路由
+    path(
+        "product/<uuid:product_id>/update-stock/",
+        views.ProductUpdateStockAPIView.as_view(),
+        name="product-update-stock",
+    ),
 ]

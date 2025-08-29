@@ -43,6 +43,7 @@ class ProductSerializer(serializers.ModelSerializer):
             "function",
             "visit_count",
             "rating_avg",
+            "stock",
         ]
 
     def get_user_info(self, obj):

@@ -644,3 +644,84 @@ class ProductPublishListAPIView(ListAPIView):
     def get_queryset(self):
        current_user_id = self.request.META.get('HTTP_X_USER_UUID')
        return Product.objects.filter(user_id=current_user_id)
+
+
+class ProductUpdateStockAPIView(APIView):
+    """更新商品库存API"""
+    
+    permission_classes = [IsAuthenticatedViaGateway]
+    
+    def post(self, request, product_id):
+        """
+        更新商品库存
+        支持增加（正数）或减少（负数）库存
+        用于订单创建（减少）或取消（恢复）时更新库存
+        """
+        try:
+            # 获取商品
+            product = Product.objects.get(product_id=product_id)
+            
+            # 获取要更新的数量
+            quantity = request.data.get('quantity')
+            
+            if quantity is None:
+                return Response({
+                    'success': False,
+                    'error': '缺少quantity参数'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # 验证数量类型
+            if not isinstance(quantity, int):
+                return Response({
+                    'success': False,
+                    'error': '库存数量必须为整数'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # 检查0值
+            if quantity == 0:
+                return Response({
+                    'success': False,
+                    'error': '库存变更数量不能为0'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # 计算新的库存
+            old_stock = product.stock
+            new_stock = old_stock + quantity
+            
+            # 检查库存是否会变为负数
+            if new_stock < 0:
+                return Response({
+                    'success': False,
+                    'error': f'库存不足，当前库存：{old_stock}，请求变更：{quantity}'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # 更新库存
+            product.stock = new_stock
+            product.save(update_fields=['stock'])
+            
+            # 记录日志
+            action = "增加" if quantity > 0 else "减少"
+            logger.info(f"Stock updated for product {product_id}: {action}{abs(quantity)} (old: {old_stock} -> new: {new_stock})")
+            
+            return Response({
+                'success': True,
+                'message': '库存更新成功',
+                'data': {
+                    'product_id': str(product_id),
+                    'quantity_changed': quantity,
+                    'old_stock': old_stock,
+                    'current_stock': new_stock
+                }
+            }, status=status.HTTP_200_OK)
+            
+        except Product.DoesNotExist:
+            return Response({
+                'success': False,
+                'error': '商品不存在'
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.error(f"Error updating stock for product {product_id}: {e}")
+            return Response({
+                'success': False,
+                'error': '库存更新失败'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
