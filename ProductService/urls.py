@@ -14,9 +14,20 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
-from django.contrib import admin
-from django.urls import path
+from django.urls import path, include
+from .health_views import nacos_health_check
+
+# 启动时注册到 Nacos
+try:
+    from .nacos_register import register_to_nacos
+    register_to_nacos()
+except ImportError:
+    print("⚠️ Nacos registration module not found")
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
+    # Nacos 健康检查端点
+    path('health/', nacos_health_check, name='nacos_health_check'),
+    
+    # API 端点
+    path('api/', include('Product.urls')),
 ]

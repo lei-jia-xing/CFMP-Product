@@ -1,13 +1,15 @@
 import uuid
+import logging
 
 from django.db import transaction
+from django.db.models import Avg, Count, Q
 from rest_framework.parsers import MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework import status
 from django_filters.rest_framework import DjangoFilterBackend
 
 from .pagination import StandardResultsSetPagination
-from .permissions import IsOwnerOrReadOnly, IsAdmin
+from .permissions import IsOwnerOrReadOnly, IsAdmin, IsAuthenticatedViaGateway
 from rest_framework.response import Response
 from rest_framework.generics import (
     ListAPIView,
@@ -30,8 +32,9 @@ from .serializers import (
     ProductMediaSerializer,
 )
 from .filters import ProductFilter
-from user.models import User, Messages, Follow
-from django.db.models import Avg
+from ProductService.user_service import user_service
+
+logger = logging.getLogger(__name__)
 
 # 商品相关视图
 
@@ -41,6 +44,14 @@ class ProductListCreateAPIView(ListCreateAPIView):
     pagination_class = StandardResultsSetPagination
     filter_backends = [DjangoFilterBackend]
     filterset_class = ProductFilter
+
+    def get_permissions(self):
+        """
+        GET请求无需权限，POST请求需要认证
+        """
+        if self.request.method == "POST":
+            return [IsAuthenticatedViaGateway()]
+        return []
 
     def get_queryset(
         self,
@@ -68,32 +79,22 @@ class ProductListCreateAPIView(ListCreateAPIView):
         return Product.objects.all().order_by("-created_at")
 
     def perform_create(self, serializer):
+        # 获取当前用户ID（来自网关）
+        current_user_id = self.request.META.get('HTTP_X_USER_UUID')
+        
         # 保存商品基本信息
-        product = serializer.save(user=self.request.user, status=3)
+        product = serializer.save(user_id=current_user_id, status=3)
 
-        # 获取当前创建商品的用户（卖家）
-        seller = self.request.user
+        # 获取当前创建商品的用户信息
+        seller_info = user_service.get_user_by_id(current_user_id)
+        
+        # 由于 UserService API 限制，暂时跳过关注者通知功能
+        # 后续可以考虑使用消息队列或事件系统来实现
+        if seller_info:
+            logger.info(f"Product {product.title} created by user {seller_info.get('username')}")
+            # TODO: 实现关注者通知功能
+            # 可以考虑发布事件到消息队列，由消息服务处理通知
 
-        # 查询所有关注该卖家的用户
-        followers = Follow.objects.filter(followee=seller).values_list(
-            "follower", flat=True
-        )
-
-        # 创建通知并发送给每个关注者
-        message_title = "新商品上架通知"
-        message_content = f"您关注的卖家 {seller.username} 发布了新商品：{product.title}，快去看看吧！"
-        message = Messages.objects.create(title=message_title, content=message_content)
-        for follower_id in followers:
-            try:
-                # 获取关注者用户对象
-                follower_user = User.objects.get(user_id=follower_id)
-
-                # 创建消息并保存到数据库
-
-                # 将消息关联到关注者
-                follower_user.messages.add(message)
-            except User.DoesNotExist:
-                continue  # 如果用户不存在则跳过
 
         # 处理分类
         if "categories" in self.request.data:
@@ -142,7 +143,13 @@ class ProductMediaListView(APIView):
     POST: 为商品添加图片
     """
 
-    permission_classes = [IsAuthenticated]
+    def get_permissions(self):
+        """
+        GET请求无需权限，POST请求需要认证
+        """
+        if self.request.method == "POST":
+            return [IsAuthenticatedViaGateway()]
+        return []
 
     def get(self, request, product_id):
         """获取商品的所有图片"""
@@ -161,7 +168,8 @@ class ProductMediaListView(APIView):
             product = Product.objects.get(product_id=product_id)
 
             # 检查用户是否有权限
-            if request.user != product.user:
+            current_user_id = self.request.META.get('HTTP_X_USER_UUID')
+            if str(current_user_id) != str(product.user_id):
                 return Response(
                     {"detail": "您没有权限修改此商品"}, status=status.HTTP_403_FORBIDDEN
                 )
@@ -207,7 +215,13 @@ class ProductMediaDetailView(APIView):
     DELETE: 删除图片
     """
 
-    permission_classes = [IsAuthenticated]
+    def get_permissions(self):
+        """
+        GET请求无需权限，PUT/DELETE请求需要认证
+        """
+        if self.request.method in ["PUT", "DELETE"]:
+            return [IsAuthenticatedViaGateway()]
+        return []
 
     def get(self, request, product_id, media_id):
         """获取单个图片详情"""
@@ -228,7 +242,8 @@ class ProductMediaDetailView(APIView):
             product = Product.objects.get(product_id=product_id)
 
             # 检查用户是否有权限
-            if request.user != product.user:
+            current_user_id = self.request.META.get('HTTP_X_USER_UUID')
+            if str(current_user_id) != str(product.user_id):
                 return Response(
                     {"detail": "您没有权限修改此商品"}, status=status.HTTP_403_FORBIDDEN
                 )
@@ -256,7 +271,8 @@ class ProductMediaDetailView(APIView):
             product = Product.objects.get(product_id=product_id)
 
             # 检查用户是否有权限
-            if request.user != product.user:
+            current_user_id = self.request.META.get('HTTP_X_USER_UUID')
+            if str(current_user_id) != str(product.user_id):
                 return Response(
                     {"detail": "您没有权限修改此商品"}, status=status.HTTP_403_FORBIDDEN
                 )
@@ -291,7 +307,7 @@ class ProductMediaBulkUpdateView(APIView):
     """
 
     parser_classes = [MultiPartParser]
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticatedViaGateway]
 
     def put(self, request, product_id):
         try:
@@ -299,7 +315,8 @@ class ProductMediaBulkUpdateView(APIView):
             product = Product.objects.get(product_id=product_id)
 
             # 权限验证
-            if request.user != product.user:
+            current_user_id = self.request.META.get('HTTP_X_USER_UUID')
+            if str(current_user_id) != str(product.user_id):
                 return Response(
                     {"detail": "无权操作此商品"}, status=status.HTTP_403_FORBIDDEN
                 )
@@ -367,9 +384,10 @@ class ProductDetailAPIView(RetrieveUpdateDestroyAPIView):
         instance = self.get_object()
         # 增加访问次数
         # 如果是自己的商品则不增加
-        if instance.user_id != request.user.user_id:
+        current_user_id = self.request.META.get('HTTP_X_USER_UUID')
+        if current_user_id and str(instance.user_id) != str(current_user_id):
             instance.visit_count += 1
-        instance.save(update_fields=["visit_count"])
+            instance.save(update_fields=["visit_count"])
         serializer = self.get_serializer(instance)
         return Response(serializer.data)
 
@@ -403,7 +421,7 @@ class ProductDetailAPIView(RetrieveUpdateDestroyAPIView):
 class ProductReviewListCreateAPIView(ListCreateAPIView):
     serializer_class = ProductReviewSerializer
     pagination_class = StandardResultsSetPagination
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticatedViaGateway]
 
     def get_queryset(self):
         """获取特定商品的所有评价，按时间倒序排列"""
@@ -417,12 +435,13 @@ class ProductReviewListCreateAPIView(ListCreateAPIView):
         product = Product.objects.get(product_id=product_id)
 
         # 检查用户是否已经评论过该商品
-        # if ProductReview.objects.filter(product=product, user=self.request.user).exists():
+        # if ProductReview.objects.filter(product=product, user_id=self.request.user.user_id).exists():
         #     from rest_framework.exceptions import ValidationError
         #     raise ValidationError({"detail": "您已经评论过该商品"})
 
         # 保存评论
-        serializer.save(user=self.request.user, product=product)
+        current_user_id = self.request.META.get('HTTP_X_USER_UUID')
+        serializer.save(user_id=current_user_id, product=product)
 
         # 更新商品平均评分
         rating_avg = ProductReview.objects.filter(product=product).aggregate(
@@ -435,7 +454,7 @@ class ProductReviewListCreateAPIView(ListCreateAPIView):
 class ProductReviewDetailAPIView(RetrieveUpdateDestroyAPIView):
     serializer_class = ProductReviewSerializer
     lookup_field = "review_id"
-    permission_classes = [IsAuthenticated, IsOwnerOrReadOnly]
+    permission_classes = [IsAuthenticatedViaGateway, IsOwnerOrReadOnly]
 
     def get_queryset(self):
         product_id = self.kwargs.get("product_id")
@@ -473,11 +492,12 @@ class UserCollectionListAPIView(ListAPIView):
     """获取用户收藏的商品列表"""
 
     serializer_class = CollectionSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticatedViaGateway]
     pagination_class = StandardResultsSetPagination
 
     def get_queryset(self):
-        return Collection.objects.filter(collecter=self.request.user).order_by(
+        current_user_id = self.request.META.get('HTTP_X_USER_UUID')
+        return Collection.objects.filter(collecter=current_user_id).order_by(
             "-create_at"
         )
 
@@ -491,18 +511,21 @@ class ProductCollectionView(APIView):
     DELETE: 取消收藏
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticatedViaGateway]
 
     def get(self, request, product_id):
         """检查商品是否已被当前用户收藏"""
+        current_user_id = request.META.get('HTTP_X_USER_UUID')
         is_collected = Collection.objects.filter(
-            collection__product_id=product_id, collecter=request.user
+            collection__product_id=product_id, collecter=current_user_id
         ).exists()
 
         return Response({"is_collected": is_collected})
 
     def post(self, request, product_id):
         """收藏商品"""
+        current_user_id = request.META.get('HTTP_X_USER_UUID')
+        
         # 检查商品是否存在
         try:
             product = Product.objects.get(product_id=product_id)
@@ -511,7 +534,7 @@ class ProductCollectionView(APIView):
 
         # 检查是否已收藏
         if Collection.objects.filter(
-            collection__product_id=product_id, collecter=request.user
+            collection__product_id=product_id, collecter=current_user_id
         ).exists():
             return Response(
                 {"detail": "您已收藏过此商品"}, status=status.HTTP_400_BAD_REQUEST
@@ -519,16 +542,18 @@ class ProductCollectionView(APIView):
 
         # 创建收藏
         collection = Collection.objects.create(
-            collection=product, collecter=request.user
+            collection=product, collecter=current_user_id
         )
         serializer = CollectionSerializer(collection)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     def delete(self, request, product_id):
         """取消收藏"""
+        current_user_id = request.META.get('HTTP_X_USER_UUID')
+        
         try:
             collection = Collection.objects.get(
-                collection__product_id=product_id, collecter=request.user
+                collection__product_id=product_id, collecter=current_user_id
             )
             collection.delete()
             return Response(status=status.HTTP_204_NO_CONTENT)
@@ -610,3 +635,95 @@ class ProductByCategoryAPIView(ListAPIView):
         return Product.objects.filter(categories__category_id=category_id).order_by(
             "-created_at"
         )
+
+class ProductPublishListAPIView(ListAPIView):
+    """获取用户自己发布的商品列表或创建新商品"""
+    
+    serializer_class = ProductSerializer
+    pagination_class = StandardResultsSetPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = ProductFilter
+    permission_classes = [IsAuthenticatedViaGateway]
+
+    def get_queryset(self):
+       current_user_id = self.request.META.get('HTTP_X_USER_UUID')
+       return Product.objects.filter(user_id=current_user_id)
+
+
+# 消息相关视图
+
+class MessageSendAPIView(APIView):
+    """发送消息给用户"""
+    
+    permission_classes = [IsAuthenticatedViaGateway]
+    
+    def post(self, request):
+        """
+        发送消息给用户
+        支持单个用户或多个用户
+        """
+        data = request.data
+        
+        # 验证必需的字段
+        title = data.get('title')
+        content = data.get('content')
+        
+        if not title or not content:
+            return Response(
+                {'error': '标题和内容不能为空'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # 获取接收者用户ID
+        user_id = data.get('user_id')
+        user_ids = data.get('user_ids', [])
+        
+        if not user_id and not user_ids:
+            return Response(
+                {'error': '必须指定接收消息的用户ID'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            success = False
+            
+            if user_id:
+                # 发送给单个用户
+                message_type = data.get('message_type', 'system')
+                related_object_type = data.get('related_object_type')
+                related_object_id = data.get('related_object_id')
+                
+                success = user_service.send_message_to_user(
+                    user_id=user_id,
+                    title=title,
+                    content=content,
+                    message_type=message_type,
+                    related_object_type=related_object_type,
+                    related_object_id=related_object_id
+                )
+            
+            elif user_ids:
+                # 发送给多个用户
+                success = user_service.send_message_to_users(
+                    user_ids=user_ids,
+                    title=title,
+                    content=content
+                )
+            
+            if success:
+                return Response(
+                    {'message': '消息发送成功'}, 
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {'error': '消息发送失败，用户服务不可用'}, 
+                    status=status.HTTP_503_SERVICE_UNAVAILABLE
+                )
+                
+        except Exception as e:
+            logger.error(f"Message sending error: {e}")
+            return Response(
+                {'error': '消息发送失败'}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

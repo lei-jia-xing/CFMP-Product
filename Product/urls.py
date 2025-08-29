@@ -7,34 +7,34 @@ urlpatterns = [
         "product/", views.ProductListCreateAPIView.as_view(), name="product-list-create"
     ),
     path(
-        "product/<int:product_id>/",
+        "product/<uuid:product_id>/",
         views.ProductDetailAPIView.as_view(),
         name="product-detail",
     ),
     # 商品图片相关路由
     path(
-        "product/<int:product_id>/media/",
+        "product/<uuid:product_id>/media/",
         views.ProductMediaListView.as_view(),
         name="product-media-list",
     ),
     path(
-        "product/<int:product_id>/media/<int:media_id>/",
+        "product/<uuid:product_id>/media/<int:media_id>/",
         views.ProductMediaDetailView.as_view(),
         name="product-media-detail",
     ),
     path(
-        "product/<int:product_id>/media/bulk/",
+        "product/<uuid:product_id>/media/bulk/",
         views.ProductMediaBulkUpdateView.as_view(),
         name="product-media-bulk-update",
     ),
     # 商品评价相关路由
     path(
-        "product/<int:product_id>/reviews/",
+        "product/<uuid:product_id>/reviews/",
         views.ProductReviewListCreateAPIView.as_view(),
         name="product-review-list-create",
     ),
     path(
-        "product/<int:product_id>/reviews/<int:review_id>/",
+        "product/<uuid:product_id>/reviews/<int:review_id>/",
         views.ProductReviewDetailAPIView.as_view(),
         name="product-review-detail",
     ),
@@ -45,7 +45,7 @@ urlpatterns = [
         name="user-collections",
     ),
     path(
-        "product/<int:product_id>/collection/",
+        "product/<uuid:product_id>/collection/",
         views.ProductCollectionView.as_view(),
         name="product-collection",
     ),
@@ -65,5 +65,9 @@ urlpatterns = [
         views.ProductByCategoryAPIView.as_view(),
         name="category-products",
     ),
-
+    path(
+        "product/publish/",
+        views.ProductPublishListAPIView.as_view(),
+        name="product-publish-list",
+    )
 ]

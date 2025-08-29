@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 from pathlib import Path
+import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -37,7 +38,10 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "rest_framework",
+    "django_filters",
     "Product",
+    "ProductService",  # 添加主应用配置
 ]
 
 MIDDLEWARE = [
@@ -75,8 +79,12 @@ WSGI_APPLICATION = "ProductService.wsgi.application"
 
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": "productdb",
+        "USER": "postgres",
+        "PASSWORD": "password",
+        "HOST": "db",  # 使用 docker-compose 服务名
+        "PORT": "5432",
     }
 }
 
@@ -103,9 +111,9 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/
 
-LANGUAGE_CODE = "zh-CN"
+LANGUAGE_CODE = "en-us"
 
-TIME_ZONE = "Shanghai"
+TIME_ZONE = "Asia/Shanghai"
 
 USE_I18N = True
 
@@ -121,3 +129,11 @@ STATIC_URL = "static/"
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# MinIO 配置 (用于文件存储)
+MINIO_STORAGE_ENDPOINT = os.getenv('MINIO_ENDPOINT', '101.200.231.225:9100')
+MINIO_STORAGE_ACCESS_KEY = os.getenv('MINIO_ACCESS_KEY', 'MtLNeBT0lJ7QKiwUhCBX')
+MINIO_STORAGE_SECRET_KEY = os.getenv('MINIO_SECRET_KEY', 'fCzYlkjcrhf7sgOpUHmKV5JvoOWbfAe40ryM8k6W')
+MINIO_STORAGE_USE_HTTPS = False  # 使用 HTTP 而不是 HTTPS
+MINIO_STORAGE_MEDIA_BUCKET_NAME = 'img'
+

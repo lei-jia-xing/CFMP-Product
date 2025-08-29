@@ -3,12 +3,12 @@ from django.urls import reverse
 from django.core.files.uploadedfile import SimpleUploadedFile
 from rest_framework.test import APIClient, APITestCase
 from rest_framework import status
-from user.models import User
 from .models import Product, Category, ProductReview, ProductMedia, Collection
 from PIL import Image
 import io
 from decimal import Decimal
-from unittest.mock import patch
+from unittest.mock import patch, Mock
+import uuid
 
 
 def create_test_image(name='test.jpg'):
@@ -22,23 +22,74 @@ def create_test_image(name='test.jpg'):
     return file
 
 
+class MockUserService:
+    """模拟用户服务"""
+    
+    def __init__(self):
+        # 模拟用户数据
+        self.users = {
+            'testuser': {
+                'user_id': str(uuid.uuid4()),
+                'username': 'testuser',
+                'email': 'test@example.com',
+                'privilege': 0,
+                'status': 0,
+                'avatar': None,
+                'address': None,
+            },
+            'admin': {
+                'user_id': str(uuid.uuid4()),
+                'username': 'admin',
+                'email': 'admin@example.com',
+                'privilege': 1,  # 管理员权限
+                'status': 0,
+                'avatar': None,
+                'address': None,
+            },
+            'otheruser': {
+                'user_id': str(uuid.uuid4()),
+                'username': 'otheruser',
+                'email': 'other@example.com',
+                'privilege': 0,
+                'status': 0,
+                'avatar': None,
+                'address': None,
+            }
+        }
+        
+        # 建立ID到用户的映射
+        self.id_to_user = {data['user_id']: data for data in self.users.values()}
+        
+        # 为测试提供便于访问的用户ID
+        self.testuser_id = self.users['testuser']['user_id']
+        self.admin_id = self.users['admin']['user_id']
+        self.otheruser_id = self.users['otheruser']['user_id']
+    
+    def get_user_by_id(self, user_id):
+        """根据用户ID获取用户信息"""
+        return self.id_to_user.get(str(user_id))
+    
+    def check_user_privilege(self, user_id):
+        """检查用户权限级别"""
+        user = self.get_user_by_id(user_id)
+        return user.get('privilege', 0) if user else 0
+
+
 class ProductModelTest(TestCase):
     """测试商品模型"""
 
     def setUp(self):
-        # 创建测试用户
-        self.user = User.objects.create(
-            username="testuser",
-            email="test@example.com",
-            password="testpass123"
-        )
+        # 模拟用户服务
+        self.mock_user_service = MockUserService()
+        self.test_user = self.mock_user_service.get_user_by_id(self.mock_user_service.testuser_id)
 
         # 创建测试分类
         self.category = Category.objects.create(name="测试分类")
 
-        # 创建测试商品
+        # 创建测试商品（使用用户ID而不是用户对象）
         self.product = Product.objects.create(
-            user=self.user,
+            product_id=uuid.uuid4(),
+            user_id=self.test_user['user_id'],
             title="测试商品",
             description="这是一个测试商品的描述",
             price=99.99,
@@ -49,7 +100,7 @@ class ProductModelTest(TestCase):
     def test_product_creation(self):
         """测试商品创建是否成功"""
         self.assertEqual(self.product.title, "测试商品")
-        self.assertEqual(self.product.user, self.user)
+        self.assertEqual(str(self.product.user_id), self.test_user['user_id'])
         self.assertEqual(self.product.price, 99.99)
         self.assertEqual(self.product.status, 2)
         self.assertTrue(self.category in self.product.categories.all())
@@ -62,16 +113,14 @@ class ProductMediaModelTest(TestCase):
     @patch('django_minio_backend.MinioBackend.exists', return_value=False)
     @patch('django_minio_backend.MinioBackend.url', return_value='http://minio-server/test.jpg')
     def setUp(self, mock_url, mock_exists, mock_save):
-        # 创建测试用户
-        self.user = User.objects.create(
-            username="testuser",
-            email="test@example.com",
-            password="testpass123"
-        )
+        # 模拟用户服务
+        self.mock_user_service = MockUserService()
+        self.test_user = self.mock_user_service.get_user_by_id(self.mock_user_service.testuser_id)
 
         # 创建测试商品
         self.product = Product.objects.create(
-            user=self.user,
+            product_id=uuid.uuid4(),
+            user_id=self.test_user['user_id'],
             title="测试商品",
             description="这是一个测试商品的描述",
             price=99.99,
@@ -121,36 +170,36 @@ class ProductMediaModelTest(TestCase):
         self.assertTrue(media2.is_main)
 
 
+
 class ProductAPITest(APITestCase):
     """测试商品基本API"""
 
-    def setUp(self):
-        # 创建测试用户
-        self.user = User.objects.create(
-            username="testuser",
-            email="test@example.com",
-            password="testpass123"
-        )
-        # 确保用户有正确的认证属性
-        self.user.is_authenticated = True
-        self.user.save()
+    @patch('ProductService.user_service.user_service')
+    def setUp(self, mock_user_service):
+        # 模拟用户服务
+        self.mock_user_service = MockUserService()
+        mock_user_service.get_user_by_id.side_effect = self.mock_user_service.get_user_by_id
+        mock_user_service.check_user_privilege.side_effect = self.mock_user_service.check_user_privilege
 
-        # 创建客户端并使用force_authenticate绕过JWT认证
-        self.client = APIClient()
-        self.client.force_authenticate(user=self.user)
+        # 获取测试用户
+        self.test_user = self.mock_user_service.get_user_by_id(self.mock_user_service.testuser_id)
 
         # 创建测试分类
         self.category = Category.objects.create(name="测试分类")
 
         # 创建测试商品
         self.product = Product.objects.create(
-            user=self.user,
+            product_id=uuid.uuid4(),
+            user_id=self.test_user['user_id'],
             title="测试商品",
             description="这是一个测试商品的描述",
             price=99.99,
-            status=2  # 已上架
+            status=2
         )
-        self.product.categories.add(self.category)
+
+        # 创建客户端并设置认证头
+        self.client = APIClient()
+        self.client.defaults['HTTP_X_USER_UUID'] = self.test_user['user_id']
 
     def test_get_product_list(self):
         """测试获取商品列表"""
@@ -168,10 +217,15 @@ class ProductAPITest(APITestCase):
         self.assertEqual(response.data['title'], "测试商品")
         self.assertEqual(response.data['price'], "99.99")
 
-    def test_create_product(self):
+    @patch('ProductService.user_service.user_service')
+    def test_create_product(self, mock_user_service):
         """测试创建商品"""
+        # 模拟用户服务
+        mock_user_service.get_user_by_id.side_effect = self.mock_user_service.get_user_by_id
+        
         url = reverse("product-list-create")
         data = {
+            "product_id": str(uuid.uuid4()),  # 添加product_id
             "title": "新商品",
             "description": "这是一个新的测试商品",
             "price": "199.99",
@@ -212,34 +266,25 @@ class ProductMediaAPITest(APITestCase):
     @patch('django_minio_backend.MinioBackend._save', return_value='test.jpg')
     @patch('django_minio_backend.MinioBackend.exists', return_value=False)
     @patch('django_minio_backend.MinioBackend.url', return_value='http://minio-server/test.jpg')
-    def setUp(self, mock_url, mock_exists, mock_save):
-        # 创建测试用户
-        self.user = User.objects.create(
-            username="testuser",
-            email="test@example.com",
-            password="testpass123"
-        )
-        # 确保用户有正确的认证属性
-        self.user.is_authenticated = True
-        self.user.save()
+    @patch('ProductService.user_service.user_service')
+    def setUp(self, mock_user_service, mock_url, mock_exists, mock_save):
+        # 模拟用户服务
+        self.mock_user_service = MockUserService()
+        mock_user_service.get_user_by_id.side_effect = self.mock_user_service.get_user_by_id
+        mock_user_service.check_user_privilege.side_effect = self.mock_user_service.check_user_privilege
 
-        # 创建另一个用户用于测试权限
-        self.other_user = User.objects.create(
-            username="otheruser",
-            email="other@example.com",
-            password="testpass123"
-        )
-        # 确保另一个用户也有正确的认证属性
-        self.other_user.is_authenticated = True
-        self.other_user.save()
+        # 获取测试用户
+        self.test_user = self.mock_user_service.get_user_by_id(self.mock_user_service.testuser_id)
+        self.other_user = self.mock_user_service.get_user_by_id(self.mock_user_service.otheruser_id)
 
-        # 创建客户端并登录
+        # 创建客户端并设置认证头
         self.client = APIClient()
-        self.client.force_authenticate(user=self.user)
+        self.client.defaults['HTTP_X_USER_UUID'] = self.test_user['user_id']
 
         # 创建测试商品
         self.product = Product.objects.create(
-            user=self.user,
+            product_id=uuid.uuid4(),
+            user_id=self.test_user['user_id'],
             title="测试商品",
             description="这是一个测试商品的描述",
             price=99.99,
@@ -290,7 +335,7 @@ class ProductMediaAPITest(APITestCase):
     def test_upload_media_permission_denied(self):
         """测试非商品所有者上传图片权限拒绝"""
         # 切换到另一个用户
-        self.client.force_authenticate(user=self.other_user)
+        self.client.defaults['HTTP_X_USER_UUID'] = self.other_user['user_id']
 
         url = reverse("product-media-list", kwargs={"product_id": self.product.product_id})
 
@@ -394,21 +439,12 @@ class CategoryAPITest(APITestCase):
     """测试分类API"""
 
     def setUp(self):
-        # 创建管理员用户
-        self.admin_user = User.objects.create(
-            username="admin",
-            email="admin@example.com",
-            password="password123",
-            privilege=1  # 设置为管理员权限
-        )
+        # 模拟用户服务
+        self.mock_user_service = MockUserService()
 
-        # 创建普通用户
-        self.regular_user = User.objects.create(
-            username="regular",
-            email="regular@example.com",
-            password="password123",
-            privilege=0  # 设置为普通用户权限
-        )
+        # 获取测试用户
+        self.admin_user = self.mock_user_service.get_user_by_id(self.mock_user_service.admin_id)
+        self.regular_user = self.mock_user_service.get_user_by_id(self.mock_user_service.testuser_id)
 
         # 创建测试分类
         self.category = Category.objects.create(
@@ -424,9 +460,18 @@ class CategoryAPITest(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data), 1)  # 应该有一个分类
 
-    def test_create_category_as_admin(self):
+    @patch('ProductService.user_service.user_service')
+    @patch('Product.permissions.user_service')
+    def test_create_category_as_admin(self, mock_permissions_user_service, mock_user_service):
         """测试管理员创建分类"""
-        self.client.force_authenticate(user=self.admin_user)
+        # 设置mock行为
+        mock_user_service.get_user_by_id.side_effect = self.mock_user_service.get_user_by_id
+        mock_user_service.check_user_privilege.side_effect = self.mock_user_service.check_user_privilege
+        mock_permissions_user_service.get_user_by_id.side_effect = self.mock_user_service.get_user_by_id
+        mock_permissions_user_service.check_user_privilege.side_effect = self.mock_user_service.check_user_privilege
+        
+        # 使用管理员用户
+        self.client.defaults['HTTP_X_USER_UUID'] = self.admin_user['user_id']
         data = {
             "name": "新分类"
         }
@@ -434,9 +479,14 @@ class CategoryAPITest(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(Category.objects.count(), 2)  # 应该有两个分类
 
-    def test_create_category_as_regular_user(self):
+    @patch('ProductService.user_service.user_service')
+    def test_create_category_as_regular_user(self, mock_user_service):
         """测试普通用户创建分类（应该被拒绝）"""
-        self.client.force_authenticate(user=self.regular_user)
+        # 设置mock行为
+        mock_user_service.get_user_by_id.side_effect = self.mock_user_service.get_user_by_id
+        mock_user_service.check_user_privilege.side_effect = self.mock_user_service.check_user_privilege
+        
+        self.client.defaults['HTTP_X_USER_UUID'] = self.regular_user['user_id']
         data = {
             "name": "新分类"
         }
@@ -444,9 +494,17 @@ class CategoryAPITest(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         self.assertEqual(Category.objects.count(), 1)  # 分类数量应该不变
 
-    def test_update_category(self):
+    @patch('ProductService.user_service.user_service')
+    @patch('Product.permissions.user_service')
+    def test_update_category(self, mock_permissions_user_service, mock_user_service):
         """测试更新分类"""
-        self.client.force_authenticate(user=self.admin_user)
+        # 设置mock行为
+        mock_user_service.get_user_by_id.side_effect = self.mock_user_service.get_user_by_id
+        mock_user_service.check_user_privilege.side_effect = self.mock_user_service.check_user_privilege
+        mock_permissions_user_service.get_user_by_id.side_effect = self.mock_user_service.get_user_by_id
+        mock_permissions_user_service.check_user_privilege.side_effect = self.mock_user_service.check_user_privilege
+        
+        self.client.defaults['HTTP_X_USER_UUID'] = self.admin_user['user_id']
         data = {
             "name": "更新的分类"
         }
@@ -455,9 +513,17 @@ class CategoryAPITest(APITestCase):
         self.category.refresh_from_db()
         self.assertEqual(self.category.name, "更新的分类")
 
-    def test_delete_category(self):
+    @patch('ProductService.user_service.user_service')
+    @patch('Product.permissions.user_service')
+    def test_delete_category(self, mock_permissions_user_service, mock_user_service):
         """测试删除分类"""
-        self.client.force_authenticate(user=self.admin_user)
+        # 设置mock行为
+        mock_user_service.get_user_by_id.side_effect = self.mock_user_service.get_user_by_id
+        mock_user_service.check_user_privilege.side_effect = self.mock_user_service.check_user_privilege
+        mock_permissions_user_service.get_user_by_id.side_effect = self.mock_user_service.get_user_by_id
+        mock_permissions_user_service.check_user_privilege.side_effect = self.mock_user_service.check_user_privilege
+        
+        self.client.defaults['HTTP_X_USER_UUID'] = self.admin_user['user_id']
         response = self.client.delete(f'/api/product/category/{self.category.category_id}/')
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertEqual(Category.objects.count(), 0)  # 应该没有分类了
@@ -466,16 +532,15 @@ class CategoryAPITest(APITestCase):
 class ProductByCategoryAPITest(APITestCase):
     """测试按分类查询商品API"""
 
-    def setUp(self):
-        # 创建测试用户
-        self.user = User.objects.create(
-            username="testuser",
-            email="test@example.com",
-            password="testpass123"
-        )
-        # 确保用户有正确的认证属性
-        self.user.is_authenticated = True
-        self.user.save()
+    @patch('ProductService.user_service.user_service')
+    def setUp(self, mock_user_service):
+        # 模拟用户服务
+        self.mock_user_service = MockUserService()
+        mock_user_service.get_user_by_id.side_effect = self.mock_user_service.get_user_by_id
+        mock_user_service.check_user_privilege.side_effect = self.mock_user_service.check_user_privilege
+
+        # 获取测试用户
+        self.test_user = self.mock_user_service.get_user_by_id(self.mock_user_service.testuser_id)
 
         # 创建两个测试分类
         self.category1 = Category.objects.create(name="分类1")
@@ -483,7 +548,8 @@ class ProductByCategoryAPITest(APITestCase):
 
         # 创建测试商品
         self.product1 = Product.objects.create(
-            user=self.user,
+            product_id=uuid.uuid4(),
+            user_id=self.test_user['user_id'],
             title="商品1",
             description="这是商品1的描述",
             price=99.99,
@@ -492,7 +558,8 @@ class ProductByCategoryAPITest(APITestCase):
         self.product1.categories.add(self.category1)
 
         self.product2 = Product.objects.create(
-            user=self.user,
+            product_id=uuid.uuid4(),
+            user_id=self.test_user['user_id'],
             title="商品2",
             description="这是商品2的描述",
             price=199.99,
@@ -501,7 +568,8 @@ class ProductByCategoryAPITest(APITestCase):
         self.product2.categories.add(self.category2)
 
         self.product3 = Product.objects.create(
-            user=self.user,
+            product_id=uuid.uuid4(),
+            user_id=self.test_user['user_id'],
             title="商品3",
             description="这是商品3的描述",
             price=299.99,
@@ -521,9 +589,9 @@ class ProductByCategoryAPITest(APITestCase):
 
         # 验证商品1和商品3在分类1下
         product_ids = [item['product_id'] for item in response.data['results']]
-        self.assertIn(self.product1.product_id, product_ids)
-        self.assertIn(self.product3.product_id, product_ids)
-        self.assertNotIn(self.product2.product_id, product_ids)
+        self.assertIn(str(self.product1.product_id), product_ids)
+        self.assertIn(str(self.product3.product_id), product_ids)
+        self.assertNotIn(str(self.product2.product_id), product_ids)
 
         # 测试分类2
         url = reverse("category-products", kwargs={"category_id": self.category2.category_id})
@@ -533,38 +601,29 @@ class ProductByCategoryAPITest(APITestCase):
 
         # 验证商品2和商品3在分类2下
         product_ids = [item['product_id'] for item in response.data['results']]
-        self.assertIn(self.product2.product_id, product_ids)
-        self.assertIn(self.product3.product_id, product_ids)
-        self.assertNotIn(self.product1.product_id, product_ids)
+        self.assertIn(str(self.product2.product_id), product_ids)
+        self.assertIn(str(self.product3.product_id), product_ids)
+        self.assertNotIn(str(self.product1.product_id), product_ids)
 
 
 class ProductReviewAPITest(APITestCase):
     """测试商品评论API"""
 
-    def setUp(self):
-        # 创建测试用户
-        self.user = User.objects.create(
-            username="testuser",
-            email="test@example.com",
-            password="testpass123"
-        )
-        # 确保用户有正确的认证属性
-        self.user.is_authenticated = True
-        self.user.save()
+    @patch('ProductService.user_service.user_service')
+    def setUp(self, mock_user_service):
+        # 模拟用户服务
+        self.mock_user_service = MockUserService()
+        mock_user_service.get_user_by_id.side_effect = self.mock_user_service.get_user_by_id
+        mock_user_service.check_user_privilege.side_effect = self.mock_user_service.check_user_privilege
 
-        # 创建另一个用户
-        self.other_user = User.objects.create(
-            username="otheruser",
-            email="other@example.com",
-            password="testpass123"
-        )
-        # 确保另一个用户也有正确的认证属性
-        self.other_user.is_authenticated = True
-        self.other_user.save()
+        # 获取测试用户
+        self.test_user = self.mock_user_service.get_user_by_id(self.mock_user_service.testuser_id)
+        self.other_user = self.mock_user_service.get_user_by_id(self.mock_user_service.otheruser_id)
 
         # 创建测试商品
         self.product = Product.objects.create(
-            user=self.user,
+            product_id=uuid.uuid4(),
+            user_id=self.test_user['user_id'],
             title="测试商品",
             description="这是一个测试商品的描述",
             price=99.99,
@@ -574,14 +633,14 @@ class ProductReviewAPITest(APITestCase):
         # 创建测试评论
         self.review = ProductReview.objects.create(
             product=self.product,
-            user=self.user,
+            user_id=self.test_user['user_id'],
             rating=5,
             comment="非常好用的商品！"
         )
 
-        # 创建客户端并登录
+        # 创建客户端并设置认证头
         self.client = APIClient()
-        self.client.force_authenticate(user=self.user)
+        self.client.defaults['HTTP_X_USER_UUID'] = self.test_user['user_id']
 
     def test_get_review_list(self):
         """测试获取商品评论列表"""
@@ -594,7 +653,7 @@ class ProductReviewAPITest(APITestCase):
     def test_create_review(self):
         """测试创建评论"""
         # 切换到另一个用户，因为每个用户只能对同一商品评论一次
-        self.client.force_authenticate(user=self.other_user)
+        self.client.defaults['HTTP_X_USER_UUID'] = self.other_user['user_id']
 
         url = reverse("product-review-list-create", kwargs={"product_id": self.product.product_id})
         data = {
@@ -641,30 +700,21 @@ class ProductReviewAPITest(APITestCase):
 class CollectionAPITest(APITestCase):
     """测试收藏API"""
 
-    def setUp(self):
-        # 创建测试用户
-        self.user = User.objects.create(
-            username="testuser",
-            email="test@example.com",
-            password="testpass123"
-        )
-        # 确保用户有正确的认证属性
-        self.user.is_authenticated = True
-        self.user.save()
+    @patch('ProductService.user_service.user_service')
+    def setUp(self, mock_user_service):
+        # 模拟用户服务
+        self.mock_user_service = MockUserService()
+        mock_user_service.get_user_by_id.side_effect = self.mock_user_service.get_user_by_id
+        mock_user_service.check_user_privilege.side_effect = self.mock_user_service.check_user_privilege
 
-        # 创建另一个用户
-        self.other_user = User.objects.create(
-            username="otheruser",
-            email="other@example.com",
-            password="testpass123"
-        )
-        # 确保另一个用户也有正确的认证属性
-        self.other_user.is_authenticated = True
-        self.other_user.save()
+        # 获取测试用户
+        self.test_user = self.mock_user_service.get_user_by_id(self.mock_user_service.testuser_id)
+        self.other_user = self.mock_user_service.get_user_by_id(self.mock_user_service.otheruser_id)
 
         # 创建测试商品
         self.product1 = Product.objects.create(
-            user=self.user,
+            product_id=uuid.uuid4(),
+            user_id=self.test_user['user_id'],
             title="商品1",
             description="这是商品1的描述",
             price=99.99,
@@ -672,7 +722,8 @@ class CollectionAPITest(APITestCase):
         )
 
         self.product2 = Product.objects.create(
-            user=self.user,
+            product_id=uuid.uuid4(),
+            user_id=self.test_user['user_id'],
             title="商品2",
             description="这是商品2的描述",
             price=199.99,
@@ -682,12 +733,12 @@ class CollectionAPITest(APITestCase):
         # 创建测试收藏
         self.collection = Collection.objects.create(
             collection=self.product1,
-            collecter=self.user
+            collecter=self.test_user['user_id']
         )
 
-        # 创建客户端并登录
+        # 创建客户端并设置认证头
         self.client = APIClient()
-        self.client.force_authenticate(user=self.user)
+        self.client.defaults['HTTP_X_USER_UUID'] = self.test_user['user_id']
 
     def test_get_collection_list(self):
         """测试获取用户收藏列表"""
@@ -719,7 +770,7 @@ class CollectionAPITest(APITestCase):
         self.assertEqual(Collection.objects.count(), 2)
 
         # 验证收藏已创建
-        collection = Collection.objects.filter(collection=self.product2, collecter=self.user).first()
+        collection = Collection.objects.filter(collection=self.product2, collecter=self.test_user['user_id']).first()
         self.assertIsNotNone(collection)
 
     def test_create_duplicate_collection(self):

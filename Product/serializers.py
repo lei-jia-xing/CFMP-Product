@@ -6,6 +6,7 @@ from .models import (
     Collection,
     ProductMedia,
 )
+from .user_utils import get_user_info
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -22,16 +23,16 @@ class ProductMediaSerializer(serializers.ModelSerializer):
 
 class ProductSerializer(serializers.ModelSerializer):
     categories = CategorySerializer(many=True, read_only=True)
-    # 使用不敏感的序列化方式
-    # user = PublicUserSerializer(read_only=True)
     # 反向引用外键，需要使用related_name
     media = ProductMediaSerializer(many=True, read_only=True)
+    # 用户信息字段，通过方法字段从用户服务获取
+    user_info = serializers.SerializerMethodField()
 
     class Meta:  # type: ignore
         model = Product
         fields = [
             "product_id",
-            "user_id",
+            "user_info",
             "title",
             "description",
             "price",
@@ -44,27 +45,41 @@ class ProductSerializer(serializers.ModelSerializer):
             "rating_avg",
         ]
 
+    def get_user_info(self, obj):
+        """获取用户信息"""
+        return get_user_info(obj.user_id)
+
 
 class ProductReviewSerializer(serializers.ModelSerializer):
-    # user = PublicUserSerializer(read_only=True)
     product = serializers.PrimaryKeyRelatedField(read_only=True)
+    # 用户信息字段，通过方法字段从用户服务获取
+    user_info = serializers.SerializerMethodField()
 
     class Meta:  # type: ignore
         model = ProductReview
         fields = [
             "review_id",
             "product",
-            "user_id",
+            "user_info",
             "rating",
             "comment",
             "created_at",
         ]
 
+    def get_user_info(self, obj):
+        """获取用户信息"""
+        return get_user_info(obj.user_id)
+
 
 class CollectionSerializer(serializers.ModelSerializer):
-    # collecter = PublicUserSerializer(read_only=True)
     collection = ProductSerializer(read_only=True)
+    # 用户信息字段，通过方法字段从用户服务获取
+    collecter_info = serializers.SerializerMethodField()
 
     class Meta:  # type: ignore
         model = Collection
-        fields = ["collection", "collecter", "create_at"]
+        fields = ["collection", "collecter_info", "create_at"]
+
+    def get_collecter_info(self, obj):
+        """获取收藏者信息"""
+        return get_user_info(obj.collecter)
