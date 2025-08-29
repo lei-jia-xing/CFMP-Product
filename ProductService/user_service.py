@@ -64,7 +64,7 @@ class UserServiceClient:
         
         try:
             # 使用实际的 API 路径
-            url = f"{service_url}/api/user/{user_id}/"
+            url = f"{service_url}/api/v1/user/{user_id}/"
             response = requests.get(url, timeout=5)
             response.raise_for_status()
             return response.json()
@@ -81,7 +81,7 @@ class UserServiceClient:
         
         try:
             # 获取关注者列表 - 使用 followee 接口（该用户作为被关注者）
-            url = f"{service_url}/api/user/followee/"
+            url = f"{service_url}/api/v1/user/followee/"
             # 需要传递用户认证信息，这里假设有某种方式获取认证令牌
             # 实际使用时需要根据认证方式调整
             response = requests.get(url, timeout=5)

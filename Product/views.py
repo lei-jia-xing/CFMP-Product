@@ -88,13 +88,9 @@ class ProductListCreateAPIView(ListCreateAPIView):
         # 获取当前创建商品的用户信息
         seller_info = user_service.get_user_by_id(current_user_id)
         
-        # 由于 UserService API 限制，暂时跳过关注者通知功能
-        # 后续可以考虑使用消息队列或事件系统来实现
         if seller_info:
             logger.info(f"Product {product.title} created by user {seller_info.get('username')}")
-            # TODO: 实现关注者通知功能
-            # 可以考虑发布事件到消息队列，由消息服务处理通知
-
+            
 
         # 处理分类
         if "categories" in self.request.data:
@@ -648,82 +644,3 @@ class ProductPublishListAPIView(ListAPIView):
     def get_queryset(self):
        current_user_id = self.request.META.get('HTTP_X_USER_UUID')
        return Product.objects.filter(user_id=current_user_id)
-
-
-# 消息相关视图
-
-class MessageSendAPIView(APIView):
-    """发送消息给用户"""
-    
-    permission_classes = [IsAuthenticatedViaGateway]
-    
-    def post(self, request):
-        """
-        发送消息给用户
-        支持单个用户或多个用户
-        """
-        data = request.data
-        
-        # 验证必需的字段
-        title = data.get('title')
-        content = data.get('content')
-        
-        if not title or not content:
-            return Response(
-                {'error': '标题和内容不能为空'}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        # 获取接收者用户ID
-        user_id = data.get('user_id')
-        user_ids = data.get('user_ids', [])
-        
-        if not user_id and not user_ids:
-            return Response(
-                {'error': '必须指定接收消息的用户ID'}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        try:
-            success = False
-            
-            if user_id:
-                # 发送给单个用户
-                message_type = data.get('message_type', 'system')
-                related_object_type = data.get('related_object_type')
-                related_object_id = data.get('related_object_id')
-                
-                success = user_service.send_message_to_user(
-                    user_id=user_id,
-                    title=title,
-                    content=content,
-                    message_type=message_type,
-                    related_object_type=related_object_type,
-                    related_object_id=related_object_id
-                )
-            
-            elif user_ids:
-                # 发送给多个用户
-                success = user_service.send_message_to_users(
-                    user_ids=user_ids,
-                    title=title,
-                    content=content
-                )
-            
-            if success:
-                return Response(
-                    {'message': '消息发送成功'}, 
-                    status=status.HTTP_200_OK
-                )
-            else:
-                return Response(
-                    {'error': '消息发送失败，用户服务不可用'}, 
-                    status=status.HTTP_503_SERVICE_UNAVAILABLE
-                )
-                
-        except Exception as e:
-            logger.error(f"Message sending error: {e}")
-            return Response(
-                {'error': '消息发送失败'}, 
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )

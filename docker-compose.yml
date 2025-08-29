@@ -31,6 +31,8 @@ services:
       - ENVIRONMENT=production
       - NACOS_USERNAME=nacos
       - NACOS_PASSWORD=no5groupnacos
+      - NACOS_HEARTBEAT_INTERVAL=5
+      - NACOS_HEARTBEAT_TIMEOUT=5
       - START_TIME=${START_TIME:-$(date +%s)}
     networks:
       - app-network
