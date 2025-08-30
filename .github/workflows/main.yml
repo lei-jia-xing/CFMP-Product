@@ -164,29 +164,3 @@ jobs:
             
             echo 'K3s ProductService 部署完成!'
           "
-
-      - name: Health Check
-        run: |
-          sleep 30
-          sshpass -p "${{ secrets.ECS_PASSWORD }}" ssh -o StrictHostKeyChecking=no root@${{ secrets.ECS_IP }} "
-            # 检查K3s集群状态
-            sudo k3s kubectl get nodes
-            
-            # 检查服务状态
-            k3s kubectl get pods -o wide
-            
-            # 健康检查
-            for i in {1..10}; do
-              if k3s kubectl get pods -l io.kompose.service=backend -o jsonpath='{.items[0].status.phase}' | grep -q Running; then
-                echo 'ProductService 健康检查通过!'
-                NODE_PORT=\$(k3s kubectl get service backend -o jsonpath='{.spec.ports[0].nodePort}')
-                if curl -f http://localhost:\$NODE_PORT/health/ > /dev/null 2>&1; then
-                  echo '应用健康检查成功!'
-                  echo '服务可通过 http://服务器IP:\$NODE_PORT 访问'
-                  break
-                fi
-              fi
-              echo '等待服务启动... (\$i/10)'
-              sleep 10
-            done
-          "
