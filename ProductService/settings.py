@@ -77,16 +77,24 @@ WSGI_APPLICATION = "ProductService.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": "productdb",
-        "USER": "postgres",
-        "PASSWORD": "password",
-        "HOST": "db",  # 使用 docker-compose 服务名
-        "PORT": "5432",
+# 优先使用 DATABASE_URL 环境变量（用于CI测试）
+DATABASE_URL = os.getenv('DATABASE_URL')
+if DATABASE_URL:
+    import dj_database_url
+    DATABASES = {
+        'default': dj_database_url.parse(DATABASE_URL)
     }
-}
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": "productdb",
+            "USER": "postgres",
+            "PASSWORD": "password",
+            "HOST": "db",  # 使用 docker-compose 服务名
+            "PORT": "5432",
+        }
+    }
 
 
 # Password validation
