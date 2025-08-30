@@ -141,12 +141,12 @@ jobs:
       - name: Deploy to K3s Server
         run: |
           # 上传部署包到服务器
-          sshpass -p ${{secrets.ECS_PASSWORD}} scp -o StrictHostKeyChecking=no \
+          sshpass -p "${{ secrets.ECS_PASSWORD }}" scp -o StrictHostKeyChecking=no \
             k3s-productservice-deploy.tar.gz \
-            root@${{secrets.ECS_IP}}:/tmp/
+            root@${{ secrets.ECS_IP }}:/tmp/
           
           # 在服务器上执行部署
-          sshpass -p ${{secrets.ECS_PASSWORD}} ssh -o StrictHostKeyChecking=no root@${{secrets.ECS_IP}} "
+          sshpass -p "${{ secrets.ECS_PASSWORD }}" ssh -o StrictHostKeyChecking=no root@${{ secrets.ECS_IP }} "
             # 清理旧的部署
             rm -rf ~/productservice-k3s-deploy
             
@@ -168,7 +168,7 @@ jobs:
       - name: Health Check
         run: |
           sleep 30
-          sshpass -p ${{secrets.ECS_PASSWORD}} ssh -o StrictHostKeyChecking=no root@${{secrets.ECS_IP}} "
+          sshpass -p "${{ secrets.ECS_PASSWORD }}" ssh -o StrictHostKeyChecking=no root@${{ secrets.ECS_IP }} "
             # 检查K3s集群状态
             sudo k3s kubectl get nodes
             
