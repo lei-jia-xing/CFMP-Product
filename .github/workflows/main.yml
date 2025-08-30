@@ -49,6 +49,12 @@ jobs:
       - name: Install Python dependencies
         run: pip install -r requirements.txt
 
+      - name: Test database connection
+        env:
+          DATABASE_URL: postgres://postgres:testpassword@localhost:5432/test_productdb
+          DJANGO_SETTINGS_MODULE: ProductService.settings
+        run: python test_ci_db.py
+
       - name: Run Django tests
         env:
           DATABASE_URL: postgres://postgres:testpassword@localhost:5432/test_productdb
