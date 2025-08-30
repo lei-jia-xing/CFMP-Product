@@ -133,7 +133,7 @@ jobs:
           chmod +x k3s-deploy/deploy-to-k3s.sh
           
           # 打包部署文件
-          tar -czf k3s-productservice-deploy.tar.gz k3s-deploy/
+          tar -czf ProductService.tar.gz k3s-deploy/
 
       - name: Install sshpass
         run: sudo apt-get update && sudo apt-get install -y sshpass
@@ -148,13 +148,13 @@ jobs:
           # 在服务器上执行部署
           sshpass -p "${{ secrets.ECS_PASSWORD }}" ssh -o StrictHostKeyChecking=no root@${{ secrets.ECS_IP }} "
             # 清理旧的部署
-            rm -rf ~/productservice-k3s-deploy
+            rm -rf ~/ProductService
             
             # 解压新的部署包
             cd ~
             tar -xzf /tmp/k3s-productservice-deploy.tar.gz
-            mv k3s-deploy productservice-k3s-deploy
-            cd productservice-k3s-deploy
+            mv k3s-deploy ProductService
+            cd ProductService
             
             # 执行部署脚本
             ./deploy-to-k3s.sh
