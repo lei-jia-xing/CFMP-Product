@@ -72,36 +72,6 @@ class UserServiceClient:
             logger.error(f"Failed to get user {user_id}: {e}")
             return None
     
-    def get_followers(self, user_id):
-        """获取用户的关注者列表（关注该用户的人）"""
-        service_url = self._get_service_url()
-        if not service_url:
-            logger.error("UserService not available")
-            return []
-        
-        try:
-            # 获取关注者列表 - 使用 followee 接口（该用户作为被关注者）
-            url = f"{service_url}/api/v1/user/followee/"
-            # 需要传递用户认证信息，这里假设有某种方式获取认证令牌
-            # 实际使用时需要根据认证方式调整
-            response = requests.get(url, timeout=5)
-            response.raise_for_status()
-            
-            # 过滤出关注指定用户的关注者
-            all_follows = response.json()
-            followers = []
-            for follow_relation in all_follows:
-                if str(follow_relation.get('followee')) == str(user_id):
-                    # 获取关注者的用户信息
-                    follower_info = self.get_user_by_id(follow_relation.get('follower'))
-                    if follower_info:
-                        followers.append(follower_info)
-            
-            return followers
-        except Exception as e:
-            logger.error(f"Failed to get followers for user {user_id}: {e}")
-            return []
-    
     def check_user_privilege(self, user_id):
         """检查用户权限级别"""
         user_info = self.get_user_by_id(user_id)
