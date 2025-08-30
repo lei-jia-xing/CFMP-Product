@@ -142,7 +142,7 @@ jobs:
         run: |
           # 上传部署包到服务器
           sshpass -p "${{ secrets.ECS_PASSWORD }}" scp -o StrictHostKeyChecking=no \
-            k3s-productservice-deploy.tar.gz \
+            ProductService.tar.gz \
             root@${{ secrets.ECS_IP }}:/tmp/
           
           # 在服务器上执行部署
@@ -152,7 +152,7 @@ jobs:
             
             # 解压新的部署包
             cd ~
-            tar -xzf /tmp/k3s-productservice-deploy.tar.gz
+            tar -xzf /tmp/ProductService.tar.gz
             mv k3s-deploy ProductService
             cd ProductService
             
@@ -160,7 +160,7 @@ jobs:
             ./deploy-to-k3s.sh
             
             # 清理临时文件
-            rm -f /tmp/k3s-productservice-deploy.tar.gz
+            rm -f /tmp/ProductService.tar.gz
             
             echo 'K3s ProductService 部署完成!'
           "
