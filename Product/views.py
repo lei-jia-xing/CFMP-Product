@@ -2,9 +2,8 @@ import uuid
 import logging
 
 from django.db import transaction
-from django.db.models import Avg, Count, Q
+from django.db.models import Avg
 from rest_framework.parsers import MultiPartParser
-from rest_framework.permissions import IsAuthenticated
 from rest_framework import status
 from django_filters.rest_framework import DjangoFilterBackend
 

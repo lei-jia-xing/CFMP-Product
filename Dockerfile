@@ -6,12 +6,10 @@ ENV PYTHONUNBUFFERED 1
 
 # 在容器中创建工作目录
 WORKDIR /app
-
 RUN rm -rf /etc/apt/sources.list.d/* && \
     rm -f /etc/apt/sources.list
 
 ADD sources.list /etc/apt/
-
 # 安装系统依赖（包含 PostgreSQL 开发文件）
 RUN apt-get update && apt-get install -y \
     gcc \
