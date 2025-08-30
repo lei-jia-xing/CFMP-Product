@@ -1,137 +1,172 @@
 #!/bin/bash
 
+# ProductService K3s 部署脚本
 set -e
 
-echo "🚀 启动 ProductService K3s 部署..."
+# 颜色定义
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
 
-# 检查 k3s 是否安装
-if ! command -v k3s &> /dev/null; then
-    echo "❌ K3s 未安装，请先安装 K3s"
-    echo "安装命令: curl -sfL https://get.k3s.io | sh -"
-    exit 1
-fi
+# 函数定义
+log_info() {
+    echo -e "${GREEN}[INFO]${NC} $1"
+}
 
-# 检查 kubectl 别名
-if ! command -v kubectl &> /dev/null; then
-    echo "设置 kubectl 别名..."
-    alias kubectl='k3s kubectl'
-fi
+log_warn() {
+    echo -e "${YELLOW}[WARN]${NC} $1"
+}
 
-# 获取当前分支或使用默认标签
-IMAGE_TAG=${1:-latest}
-IMAGE_NAME="productservice-backend"
+log_error() {
+    echo -e "${RED}[ERROR]${NC} $1"
+}
 
-echo "构建 Docker 镜像..."
-docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
+log_step() {
+    echo -e "${BLUE}[STEP]${NC} $1"
+}
 
-echo "导入镜像到 k3s..."
-docker save ${IMAGE_NAME}:${IMAGE_TAG} | sudo k3s ctr images import -
-
-# 更新部署配置
-echo "更新部署配置..."
-cp k8s/backend-deployment.yaml k8s/backend-deployment.yaml.bak
-sed -i "s|productservice-backend:latest|${IMAGE_NAME}:${IMAGE_TAG}|g" k8s/backend-deployment.yaml
-sed -i "s|imagePullPolicy: IfNotPresent|imagePullPolicy: Never|g" k8s/backend-deployment.yaml
-
-# 清理旧部署
-echo "清理旧部署..."
-sudo kubectl delete -f k8s/ --ignore-not-found=true
-sleep 3
-
-# 先部署持久化存储和数据库
-echo "部署数据库服务..."
-if [ -f k8s/postgres-data-persistentvolumeclaim.yaml ]; then
-    sudo kubectl apply -f k8s/postgres-data-persistentvolumeclaim.yaml
-fi
-
-if [ -f k8s/db-service.yaml ]; then
-    sudo kubectl apply -f k8s/db-service.yaml
-fi
-
-if [ -f k8s/db-deployment.yaml ]; then
-    sudo kubectl apply -f k8s/db-deployment.yaml
-fi
-
-# 等待数据库服务就绪
-echo "等待数据库服务启动..."
-sleep 10
-
-# 部署后端应用
-echo "部署后端应用..."
-sudo kubectl apply -f k8s/backend-deployment.yaml
-sudo kubectl apply -f k8s/backend-service.yaml
-
-# 等待应用启动
-echo "等待应用启动..."
-sudo kubectl wait --for=condition=ready pod -l io.kompose.service=backend --timeout=300s
-
-# 检查数据库连接
-echo "检查数据库连接..."
-DB_POD=$(sudo kubectl get pods -l io.kompose.service=db -o jsonpath='{.items[0].metadata.name}')
-if [ -n "$DB_POD" ]; then
-    sudo kubectl wait --for=condition=ready pod -l io.kompose.service=db --timeout=300s
-    echo "✅ 数据库服务就绪"
-else
-    echo "⚠️  未找到数据库 Pod"
-fi
-
-# 暴露服务
-echo "配置服务访问..."
-sudo kubectl patch service backend -p '{"spec":{"type":"NodePort"}}'
-
-# 执行数据库迁移
-echo "执行数据库迁移..."
-BACKEND_POD=$(sudo kubectl get pods -l io.kompose.service=backend -o jsonpath='{.items[0].metadata.name}')
-if [ -n "$BACKEND_POD" ]; then
-    echo "在 Pod $BACKEND_POD 中执行迁移..."
-    sudo kubectl exec $BACKEND_POD -- python manage.py migrate
-    echo "✅ 数据库迁移完成"
-fi
-
-# 显示部署状态
-echo ""
-echo "📊 部署状态："
-sudo kubectl get pods,svc
-echo ""
-
-# 显示访问地址
-NODE_PORT=$(sudo kubectl get service backend -o jsonpath='{.spec.ports[0].nodePort}')
-NODE_IP=$(hostname -I | awk '{print $1}')
-
-echo "✅ 部署完成！"
-echo ""
-echo "🌐 访问地址："
-echo "后端服务: http://$NODE_IP:$NODE_PORT"
-echo "健康检查: http://$NODE_IP:$NODE_PORT/health/"
-echo ""
-
-# 恢复备份的部署配置
-mv k8s/backend-deployment.yaml.bak k8s/backend-deployment.yaml
-
-# 执行健康检查
-echo "🔍 执行健康检查..."
-sleep 10
-
-for i in {1..5}; do
-    if curl -f http://$NODE_IP:$NODE_PORT/health/ 2>/dev/null; then
-        echo "✅ 健康检查通过！"
-        break
-    else
-        echo "⏳ 健康检查失败，重试中... ($i/5)"
-        sleep 5
+# 检查K3s是否安装
+check_k3s() {
+    if ! command -v k3s &> /dev/null; then
+        log_error "K3s 未安装，请先安装K3s"
+        echo "安装命令: curl -sfL https://get.k3s.io | sh -"
+        exit 1
     fi
     
-    if [ $i -eq 5 ]; then
-        echo "❌ 健康检查失败，请检查日志:"
-        echo "kubectl logs -l io.kompose.service=backend"
+    if ! command -v kubectl &> /dev/null; then
+        log_warn "kubectl 未找到，使用 k3s kubectl"
+        alias kubectl='k3s kubectl'
     fi
-done
+}
 
-echo ""
-echo "🎉 ProductService 部署完成！"
-echo ""
-echo "常用命令："
-echo "  查看 Pods: kubectl get pods"
-echo "  查看日志: kubectl logs -l io.kompose.service=backend"
-echo "  进入容器: kubectl exec -it \$(kubectl get pods -l io.kompose.service=backend -o jsonpath='{.items[0].metadata.name}') -- bash"
-echo "  删除部署: kubectl delete -f k8s/"
+# 检查Docker镜像
+check_docker_image() {
+    log_step "检查Docker镜像..."
+    
+    if [[ -f "productservice-backend.tar.gz" ]]; then
+        log_info "发现Docker镜像文件，正在导入到K3s..."
+        sudo k3s ctr images import productservice-backend.tar.gz
+    elif ! docker images | grep -q "productservice-backend"; then
+        log_info "构建Docker镜像..."
+        docker build -t productservice-backend:latest .
+        
+        # 导入镜像到K3s
+        log_info "导入镜像到K3s..."
+        docker save productservice-backend:latest | sudo k3s ctr images import -
+    else
+        log_info "Docker镜像已存在，导入到K3s..."
+        docker save productservice-backend:latest | sudo k3s ctr images import -
+    fi
+}
+
+# 部署数据库
+deploy_database() {
+    log_step "部署PostgreSQL数据库..."
+    
+    # 应用PVC
+    kubectl apply -f k8s/postgres-data-persistentvolumeclaim.yaml
+    
+    # 部署数据库
+    kubectl apply -f k8s/db-deployment.yaml
+    kubectl apply -f k8s/db-service.yaml
+    
+    # 等待数据库就绪
+    log_info "等待数据库启动..."
+    kubectl wait --for=condition=ready pod -l io.kompose.service=db --timeout=300s || {
+        log_error "数据库启动超时"
+        kubectl logs -l io.kompose.service=db --tail=50
+        exit 1
+    }
+    
+    log_info "数据库部署完成"
+}
+
+# 部署后端服务
+deploy_backend() {
+    log_step "部署ProductService后端..."
+    
+    # 部署后端服务
+    kubectl apply -f k8s/backend-deployment.yaml
+    kubectl apply -f k8s/backend-service.yaml
+    
+    # 等待后端服务就绪
+    log_info "等待后端服务启动..."
+    kubectl wait --for=condition=ready pod -l io.kompose.service=backend --timeout=300s || {
+        log_error "后端服务启动超时"
+        kubectl logs -l io.kompose.service=backend --tail=50
+        exit 1
+    }
+    
+    log_info "后端服务部署完成"
+}
+
+# 健康检查
+health_check() {
+    log_step "执行健康检查..."
+    
+    # 获取NodePort
+    NODE_PORT=$(kubectl get service backend -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null || echo "30800")
+    
+    # 等待服务完全启动
+    sleep 30
+    
+    # 检查健康端点
+    for i in {1..10}; do
+        if curl -f http://localhost:$NODE_PORT/health/ > /dev/null 2>&1; then
+            log_info "健康检查通过！"
+            break
+        elif [ $i -eq 10 ]; then
+            log_warn "健康检查失败，但服务可能仍在启动中"
+            kubectl logs -l io.kompose.service=backend --tail=20
+        else
+            log_info "等待服务启动... ($i/10)"
+            sleep 10
+        fi
+    done
+}
+
+# 显示部署信息
+show_deployment_info() {
+    log_step "部署信息:"
+    
+    echo -e "${GREEN}集群状态:${NC}"
+    kubectl get nodes
+    
+    echo -e "${GREEN}Pod状态:${NC}"
+    kubectl get pods -o wide
+    
+    echo -e "${GREEN}Service状态:${NC}"
+    kubectl get services
+    
+    # 获取访问信息
+    NODE_PORT=$(kubectl get service backend -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null || echo "30800")
+    NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
+    
+    echo -e "${GREEN}访问信息:${NC}"
+    echo -e "  内部访问: http://backend.default.svc.cluster.local:8000"
+    echo -e "  外部访问: http://$NODE_IP:$NODE_PORT"
+    echo -e "  本地访问: http://localhost:$NODE_PORT"
+    echo -e "  健康检查: http://localhost:$NODE_PORT/health/"
+}
+
+# 主函数
+main() {
+    log_info "开始部署 ProductService 到 K3s 集群..."
+    
+    check_k3s
+    check_docker_image
+    deploy_database
+    deploy_backend
+    health_check
+    show_deployment_info
+    
+    log_info "ProductService 部署完成！"
+}
+
+# 处理中断信号
+trap 'log_error "部署被中断"; exit 1' INT TERM
+
+# 执行主函数
+main "$@"
