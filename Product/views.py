@@ -8,7 +8,6 @@ from rest_framework import status
 from django_filters.rest_framework import DjangoFilterBackend
 
 from .pagination import StandardResultsSetPagination
-from .permissions import IsOwnerOrReadOnly, IsAdmin, IsAuthenticatedViaGateway
 from rest_framework.response import Response
 from rest_framework.generics import (
     ListAPIView,
@@ -43,14 +42,6 @@ class ProductListCreateAPIView(ListCreateAPIView):
     pagination_class = StandardResultsSetPagination
     filter_backends = [DjangoFilterBackend]
     filterset_class = ProductFilter
-
-    def get_permissions(self):
-        """
-        GET请求无需权限，POST请求需要认证
-        """
-        if self.request.method == "POST":
-            return [IsAuthenticatedViaGateway()]
-        return []
 
     def get_queryset(
         self,
@@ -138,13 +129,6 @@ class ProductMediaListView(APIView):
     POST: 为商品添加图片
     """
 
-    def get_permissions(self):
-        """
-        GET请求无需权限，POST请求需要认证
-        """
-        if self.request.method == "POST":
-            return [IsAuthenticatedViaGateway()]
-        return []
 
     def get(self, request, product_id):
         """获取商品的所有图片"""
@@ -161,13 +145,6 @@ class ProductMediaListView(APIView):
         try:
             # 检查商品是否存在
             product = Product.objects.get(product_id=product_id)
-
-            # 检查用户是否有权限
-            current_user_id = self.request.META.get('HTTP_X_USER_UUID')
-            if str(current_user_id) != str(product.user_id):
-                return Response(
-                    {"detail": "您没有权限修改此商品"}, status=status.HTTP_403_FORBIDDEN
-                )
 
             # 处理上传的图片
             if "media" in request.FILES:
@@ -210,13 +187,6 @@ class ProductMediaDetailView(APIView):
     DELETE: 删除图片
     """
 
-    def get_permissions(self):
-        """
-        GET请求无需权限，PUT/DELETE请求需要认证
-        """
-        if self.request.method in ["PUT", "DELETE"]:
-            return [IsAuthenticatedViaGateway()]
-        return []
 
     def get(self, request, product_id, media_id):
         """获取单个图片详情"""
@@ -302,7 +272,6 @@ class ProductMediaBulkUpdateView(APIView):
     """
 
     parser_classes = [MultiPartParser]
-    permission_classes = [IsAuthenticatedViaGateway]
 
     def put(self, request, product_id):
         try:
@@ -363,16 +332,7 @@ class ProductDetailAPIView(RetrieveUpdateDestroyAPIView):
     queryset = Product.objects.all()
     serializer_class = ProductSerializer
     lookup_field = "product_id"
-    permission_classes = [IsOwnerOrReadOnly]
 
-    def get_permissions(self):
-        """
-        区分权限，对于写操作需要验证所有者
-        对于读操作不需要权限
-        """
-        if self.request.method in ["GET", "HEAD", "OPTIONS"]:
-            return []
-        return [IsOwnerOrReadOnly()]
 
     def retrieve(self, request, *args, **kwargs):
         """获取商品详情并增加访问次数"""
@@ -416,7 +376,6 @@ class ProductDetailAPIView(RetrieveUpdateDestroyAPIView):
 class ProductReviewListCreateAPIView(ListCreateAPIView):
     serializer_class = ProductReviewSerializer
     pagination_class = StandardResultsSetPagination
-    permission_classes = [IsAuthenticatedViaGateway]
 
     def get_queryset(self):
         """获取特定商品的所有评价，按时间倒序排列"""
@@ -449,7 +408,6 @@ class ProductReviewListCreateAPIView(ListCreateAPIView):
 class ProductReviewDetailAPIView(RetrieveUpdateDestroyAPIView):
     serializer_class = ProductReviewSerializer
     lookup_field = "review_id"
-    permission_classes = [IsAuthenticatedViaGateway, IsOwnerOrReadOnly]
 
     def get_queryset(self):
         product_id = self.kwargs.get("product_id")
@@ -487,7 +445,6 @@ class UserCollectionListAPIView(ListAPIView):
     """获取用户收藏的商品列表"""
 
     serializer_class = CollectionSerializer
-    permission_classes = [IsAuthenticatedViaGateway]
     pagination_class = StandardResultsSetPagination
 
     def get_queryset(self):
@@ -505,8 +462,6 @@ class ProductCollectionView(APIView):
     POST: 收藏商品
     DELETE: 取消收藏
     """
-
-    permission_classes = [IsAuthenticatedViaGateway]
 
     def get(self, request, product_id):
         """检查商品是否已被当前用户收藏"""
@@ -564,14 +519,6 @@ class CategoryListCreateAPIView(ListCreateAPIView):
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
 
-    def get_permissions(self):
-        """针对写操作
-        Returns:
-            返回权限级别
-        """
-        if self.request.method == "GET":
-            return []
-        return [IsAdmin()]
 
 
 class CategoryDetailAPIView(RetrieveUpdateDestroyAPIView):
@@ -580,11 +527,6 @@ class CategoryDetailAPIView(RetrieveUpdateDestroyAPIView):
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
     lookup_field = "category_id"
-
-    def get_permissions(self):
-        if self.request.method == "GET":
-            return []
-        return [IsAdmin()]
 
 
 class ProductByCategoryAPIView(ListAPIView):
@@ -638,7 +580,6 @@ class ProductPublishListAPIView(ListAPIView):
     pagination_class = StandardResultsSetPagination
     filter_backends = [DjangoFilterBackend]
     filterset_class = ProductFilter
-    permission_classes = [IsAuthenticatedViaGateway]
 
     def get_queryset(self):
        current_user_id = self.request.META.get('HTTP_X_USER_UUID')
@@ -647,8 +588,6 @@ class ProductPublishListAPIView(ListAPIView):
 
 class ProductUpdateStockAPIView(APIView):
     """更新商品库存API"""
-    
-    permission_classes = [IsAuthenticatedViaGateway]
     
     def post(self, request, product_id):
         """
