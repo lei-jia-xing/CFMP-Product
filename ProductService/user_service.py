@@ -63,6 +63,10 @@ class UserServiceClient:
             return None
         
         try:
+            # 确保user_id是字符串格式
+            if user_id:
+                user_id = str(user_id)
+            
             # 使用实际的 API 路径
             url = f"{service_url}/api/v1/user/"
             headers = {"HTTP_X_USER_UUID": user_id}
