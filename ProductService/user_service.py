@@ -68,7 +68,7 @@ class UserServiceClient:
                 user_id = str(user_id)
             
             # 使用实际的 API 路径
-            url = f"{service_url}/api/v1/user/"
+            url = f"{service_url}/api/v1/user/me/"
             headers = {"HTTP_X_USER_UUID": user_id}
             response = requests.get(url, headers=headers, timeout=5)
             response.raise_for_status()
@@ -76,13 +76,6 @@ class UserServiceClient:
         except Exception as e:
             logger.error(f"Failed to get user {user_id}: {e}")
             return None
-    
-    def check_user_privilege(self, user_id):
-        """检查用户权限级别"""
-        user_info = self.get_user_by_id(user_id)
-        if user_info:
-            return user_info.get('privilege', 0)
-        return 0
 
 
 # 全局用户服务客户端实例
