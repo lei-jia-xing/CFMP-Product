@@ -199,7 +199,7 @@ class ProductAPITest(APITestCase):
 
         # 创建客户端并设置认证头
         self.client = APIClient()
-        self.client.defaults['HTTP_X_USER_UUID'] = self.test_user['user_id']
+        self.client.defaults['UUID'] = self.test_user['user_id']
 
     def test_get_product_list(self):
         """测试获取商品列表"""
@@ -232,7 +232,7 @@ class ProductAPITest(APITestCase):
             "status": 0,
             "categories": [self.category.category_id]
         }
-        response = self.client.post(url, data, format="json")
+        response = self.client.post(url, data, format="json", **{'HTTP_UUID': self.test_user['user_id']})
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(response.data['title'], "新商品")
         self.assertEqual(Product.objects.count(), 2)
@@ -279,7 +279,7 @@ class ProductMediaAPITest(APITestCase):
 
         # 创建客户端并设置认证头
         self.client = APIClient()
-        self.client.defaults['HTTP_X_USER_UUID'] = self.test_user['user_id']
+        self.client.defaults['UUID'] = self.test_user['user_id']
 
         # 创建测试商品
         self.product = Product.objects.create(
@@ -335,7 +335,7 @@ class ProductMediaAPITest(APITestCase):
     def test_upload_media_permission_denied(self):
         """测试非商品所有者上传图片（现在允许所有用户上传）"""
         # 切换到另一个用户
-        self.client.defaults['HTTP_X_USER_UUID'] = self.other_user['user_id']
+        self.client.defaults['UUID'] = self.other_user['user_id']
 
         url = reverse("product-media-list", kwargs={"product_id": self.product.product_id})
 
@@ -383,7 +383,7 @@ class ProductMediaAPITest(APITestCase):
             "is_main": True
         }
 
-        response = self.client.put(url, data, format="json")
+        response = self.client.put(url, data, format="json", **{'HTTP_UUID': self.test_user['user_id']})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
         # 刷新数据库数据
@@ -401,7 +401,7 @@ class ProductMediaAPITest(APITestCase):
             "media_id": self.media.media_id
         })
 
-        response = self.client.delete(url)
+        response = self.client.delete(url, **{'HTTP_UUID': self.test_user['user_id']})
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertEqual(ProductMedia.objects.filter(product=self.product).count(), 0)
 
@@ -428,7 +428,7 @@ class ProductMediaAPITest(APITestCase):
             "media_id": self.media.media_id
         })
 
-        response = self.client.delete(url)
+        response = self.client.delete(url, **{'HTTP_UUID': self.test_user['user_id']})
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
 
         # 刷新第二张图片数据
@@ -471,7 +471,7 @@ class CategoryAPITest(APITestCase):
         mock_user_service.check_user_privilege.side_effect = self.mock_user_service.check_user_privilege
         
         # 使用管理员用户
-        self.client.defaults['HTTP_X_USER_UUID'] = self.admin_user['user_id']
+        self.client.defaults['UUID'] = self.admin_user['user_id']
         data = {
             "name": "新分类"
         }
@@ -486,7 +486,7 @@ class CategoryAPITest(APITestCase):
         mock_user_service.get_user_by_id.side_effect = self.mock_user_service.get_user_by_id
         mock_user_service.check_user_privilege.side_effect = self.mock_user_service.check_user_privilege
         
-        self.client.defaults['HTTP_X_USER_UUID'] = self.regular_user['user_id']
+        self.client.defaults['UUID'] = self.regular_user['user_id']
         data = {
             "name": "新分类"
         }
@@ -501,7 +501,7 @@ class CategoryAPITest(APITestCase):
         mock_user_service.get_user_by_id.side_effect = self.mock_user_service.get_user_by_id
         mock_user_service.check_user_privilege.side_effect = self.mock_user_service.check_user_privilege
         
-        self.client.defaults['HTTP_X_USER_UUID'] = self.admin_user['user_id']
+        self.client.defaults['UUID'] = self.admin_user['user_id']
         data = {
             "name": "更新的分类"
         }
@@ -517,7 +517,7 @@ class CategoryAPITest(APITestCase):
         mock_user_service.get_user_by_id.side_effect = self.mock_user_service.get_user_by_id
         mock_user_service.check_user_privilege.side_effect = self.mock_user_service.check_user_privilege
         
-        self.client.defaults['HTTP_X_USER_UUID'] = self.admin_user['user_id']
+        self.client.defaults['UUID'] = self.admin_user['user_id']
         response = self.client.delete(f'/api/product/category/{self.category.category_id}/')
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertEqual(Category.objects.count(), 0)  # 应该没有分类了
@@ -634,7 +634,7 @@ class ProductReviewAPITest(APITestCase):
 
         # 创建客户端并设置认证头
         self.client = APIClient()
-        self.client.defaults['HTTP_X_USER_UUID'] = self.test_user['user_id']
+        self.client.defaults['UUID'] = self.test_user['user_id']
 
     def test_get_review_list(self):
         """测试获取商品评论列表"""
@@ -647,14 +647,14 @@ class ProductReviewAPITest(APITestCase):
     def test_create_review(self):
         """测试创建评论"""
         # 切换到另一个用户，因为每个用户只能对同一商品评论一次
-        self.client.defaults['HTTP_X_USER_UUID'] = self.other_user['user_id']
+        self.client.defaults['UUID'] = self.other_user['user_id']
 
         url = reverse("product-review-list-create", kwargs={"product_id": self.product.product_id})
         data = {
             "rating": 4,
             "comment": "不错的商品，但有点贵"
         }
-        response = self.client.post(url, data, format="json")
+        response = self.client.post(url, data, format="json", **{'HTTP_UUID': self.other_user['user_id']})
 
         # 如果失败，打印详细错误信息
         if response.status_code != status.HTTP_201_CREATED:
@@ -732,12 +732,12 @@ class CollectionAPITest(APITestCase):
 
         # 创建客户端并设置认证头
         self.client = APIClient()
-        self.client.defaults['HTTP_X_USER_UUID'] = self.test_user['user_id']
+        self.client.defaults['UUID'] = self.test_user['user_id']
 
     def test_get_collection_list(self):
         """测试获取用户收藏列表"""
         url = reverse("user-collections")
-        response = self.client.get(url)
+        response = self.client.get(url, **{'HTTP_UUID': self.test_user['user_id']})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data['count'], 1)
         self.assertEqual(response.data['results'][0]['collection']['title'], "商品1")
@@ -746,20 +746,20 @@ class CollectionAPITest(APITestCase):
         """测试检查商品收藏状态"""
         # 已收藏的商品
         url = reverse("product-collection", kwargs={"product_id": self.product1.product_id})
-        response = self.client.get(url)
+        response = self.client.get(url, **{'HTTP_UUID': self.test_user['user_id']})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data['is_collected'])
 
         # 未收藏的商品
         url = reverse("product-collection", kwargs={"product_id": self.product2.product_id})
-        response = self.client.get(url)
+        response = self.client.get(url, **{'HTTP_UUID': self.test_user['user_id']})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertFalse(response.data['is_collected'])
 
     def test_create_collection(self):
         """测试创建收藏"""
         url = reverse("product-collection", kwargs={"product_id": self.product2.product_id})
-        response = self.client.post(url)
+        response = self.client.post(url, **{'HTTP_UUID': self.test_user['user_id']})
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(Collection.objects.count(), 2)
 
@@ -770,13 +770,13 @@ class CollectionAPITest(APITestCase):
     def test_create_duplicate_collection(self):
         """测试重复收藏被拒绝"""
         url = reverse("product-collection", kwargs={"product_id": self.product1.product_id})
-        response = self.client.post(url)
+        response = self.client.post(url, **{'HTTP_UUID': self.test_user['user_id']})
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(Collection.objects.count(), 1)
 
     def test_delete_collection(self):
         """测试取消收藏"""
         url = reverse("product-collection", kwargs={"product_id": self.product1.product_id})
-        response = self.client.delete(url)
+        response = self.client.delete(url, **{'HTTP_UUID': self.test_user['user_id']})
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertEqual(Collection.objects.count(), 0)
