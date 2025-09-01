@@ -64,8 +64,9 @@ class UserServiceClient:
         
         try:
             # 使用实际的 API 路径
-            url = f"{service_url}/api/v1/user/{user_id}/"
-            response = requests.get(url, timeout=5)
+            url = f"{service_url}/api/v1/user/"
+            headers = {"HTTP_X_USER_UUID": user_id}
+            response = requests.get(url, headers=headers, timeout=5)
             response.raise_for_status()
             return response.json()
         except Exception as e:

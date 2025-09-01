@@ -70,7 +70,7 @@ class ProductListCreateAPIView(ListCreateAPIView):
 
     def perform_create(self, serializer):
         # 获取当前用户ID（来自网关）
-        current_user_id = self.request.META.get('HTTP_X_USER_UUID')
+        current_user_id = self.request.headers.get('HTTP_X_USER_UUID')
         
         # 保存商品基本信息
         product = serializer.save(user_id=current_user_id, status=3)
@@ -207,7 +207,7 @@ class ProductMediaDetailView(APIView):
             product = Product.objects.get(product_id=product_id)
 
             # 检查用户是否有权限
-            current_user_id = self.request.META.get('HTTP_X_USER_UUID')
+            current_user_id = self.request.headers.get('HTTP_X_USER_UUID')
             if str(current_user_id) != str(product.user_id):
                 return Response(
                     {"detail": "您没有权限修改此商品"}, status=status.HTTP_403_FORBIDDEN
@@ -236,7 +236,7 @@ class ProductMediaDetailView(APIView):
             product = Product.objects.get(product_id=product_id)
 
             # 检查用户是否有权限
-            current_user_id = self.request.META.get('HTTP_X_USER_UUID')
+            current_user_id = self.request.headers.get('HTTP_X_USER_UUID')
             if str(current_user_id) != str(product.user_id):
                 return Response(
                     {"detail": "您没有权限修改此商品"}, status=status.HTTP_403_FORBIDDEN
@@ -279,7 +279,7 @@ class ProductMediaBulkUpdateView(APIView):
             product = Product.objects.get(product_id=product_id)
 
             # 权限验证
-            current_user_id = self.request.META.get('HTTP_X_USER_UUID')
+            current_user_id = self.request.headers.get('HTTP_X_USER_UUID')
             if str(current_user_id) != str(product.user_id):
                 return Response(
                     {"detail": "无权操作此商品"}, status=status.HTTP_403_FORBIDDEN
@@ -339,7 +339,7 @@ class ProductDetailAPIView(RetrieveUpdateDestroyAPIView):
         instance = self.get_object()
         # 增加访问次数
         # 如果是自己的商品则不增加
-        current_user_id = self.request.META.get('HTTP_X_USER_UUID')
+        current_user_id = self.request.headers.get('HTTP_X_USER_UUID')
         if current_user_id and str(instance.user_id) != str(current_user_id):
             instance.visit_count += 1
             instance.save(update_fields=["visit_count"])
@@ -394,7 +394,7 @@ class ProductReviewListCreateAPIView(ListCreateAPIView):
         #     raise ValidationError({"detail": "您已经评论过该商品"})
 
         # 保存评论
-        current_user_id = self.request.META.get('HTTP_X_USER_UUID')
+        current_user_id = self.request.headers.get('HTTP_X_USER_UUID')
         serializer.save(user_id=current_user_id, product=product)
 
         # 更新商品平均评分
@@ -448,7 +448,7 @@ class UserCollectionListAPIView(ListAPIView):
     pagination_class = StandardResultsSetPagination
 
     def get_queryset(self):
-        current_user_id = self.request.META.get('HTTP_X_USER_UUID')
+        current_user_id = self.request.headers.get('HTTP_X_USER_UUID')
         return Collection.objects.filter(collecter=current_user_id).order_by(
             "-create_at"
         )
@@ -465,7 +465,7 @@ class ProductCollectionView(APIView):
 
     def get(self, request, product_id):
         """检查商品是否已被当前用户收藏"""
-        current_user_id = request.META.get('HTTP_X_USER_UUID')
+        current_user_id = request.headers.get('HTTP_X_USER_UUID')
         is_collected = Collection.objects.filter(
             collection__product_id=product_id, collecter=current_user_id
         ).exists()
@@ -474,7 +474,7 @@ class ProductCollectionView(APIView):
 
     def post(self, request, product_id):
         """收藏商品"""
-        current_user_id = request.META.get('HTTP_X_USER_UUID')
+        current_user_id = request.headers.get('HTTP_X_USER_UUID')
         
         # 检查商品是否存在
         try:
@@ -499,7 +499,7 @@ class ProductCollectionView(APIView):
 
     def delete(self, request, product_id):
         """取消收藏"""
-        current_user_id = request.META.get('HTTP_X_USER_UUID')
+        current_user_id = request.headers.get('HTTP_X_USER_UUID')
         
         try:
             collection = Collection.objects.get(
@@ -582,7 +582,7 @@ class ProductPublishListAPIView(ListAPIView):
     filterset_class = ProductFilter
 
     def get_queryset(self):
-       current_user_id = self.request.META.get('HTTP_X_USER_UUID')
+       current_user_id = self.request.headers.get('HTTP_X_USER_UUID')
        return Product.objects.filter(user_id=current_user_id)
 
 
