@@ -31,6 +31,7 @@ spec:
             - name: POSTGRES_USER
               value: postgres
           image: postgres:14
+          imagePullPolicy: Never
           name: postgres-db
           ports:
             - containerPort: 5432

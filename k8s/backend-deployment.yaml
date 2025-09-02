@@ -41,7 +41,7 @@ spec:
             - name: START_TIME
               value: $(date +%s)
           image: productservice-backend:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Never
           name: django-backend
           ports:
             - containerPort: 8000
