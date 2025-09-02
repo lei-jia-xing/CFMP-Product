@@ -18,9 +18,9 @@ class NacosHeartbeatManager:
 
     def __init__(self):
         self.service_name = "ProductService"
-        self.service_port = int(os.getenv("SERVICE_PORT", "8000"))
         self.nacos_client = None
         self.service_ip = None
+        self.service_port = None  # 将在 _get_service_ip 中设置
         self.heartbeat_interval = int(
             os.getenv("NACOS_HEARTBEAT_INTERVAL", "5")
         )  # 默认5秒
@@ -58,8 +58,17 @@ class NacosHeartbeatManager:
     def _get_service_ip(self):
         """获取服务IP地址"""
         try:
-            hostname = socket.gethostname()
-            self.service_ip = socket.gethostbyname(hostname)
+            environment = os.getenv('ENVIRONMENT', 'development')
+            
+            if environment == 'production':
+                # 生产环境：硬编码使用服务器公网IP
+                self.service_ip = '101.132.163.45'
+                self.service_port = 30800  # 使用NodePort端口
+            else:
+                # 开发环境：使用容器IP
+                hostname = socket.gethostname()
+                self.service_ip = socket.gethostbyname(hostname)
+                self.service_port = int(os.getenv("SERVICE_PORT", "8000"))
         except Exception as e:
             logger.error(f"Failed to get service IP: {e}")
             self.service_ip = "127.0.0.1"
