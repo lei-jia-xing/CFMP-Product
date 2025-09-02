@@ -43,7 +43,7 @@ spec:
               value: nacos
             - name: START_TIME
               value: $(date +%s)
-          image: product:latest
+          image: productservice-backend:latest
           imagePullPolicy: Never
           name: django-backend
           ports:
