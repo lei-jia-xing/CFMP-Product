@@ -76,16 +76,16 @@ jobs:
           # 拉取PostgreSQL镜像
           docker pull postgres:14
           
-          # 保存镜像
-          docker save productservice-backend:latest | gzip > productservice-backend.tar.gz
-          docker save postgres:14 | gzip > postgres-14.tar.gz
+          # 保存镜像，使用新的文件名
+          docker save productservice-backend:latest | gzip > product-service.tar.gz
+          docker save postgres:14 | gzip > product-db.tar.gz
 
       - name: Create K3s deployment package
         run: |
           mkdir -p k3s-deploy
           cp -r k8s/* k3s-deploy/
-          cp productservice-backend.tar.gz k3s-deploy/
-          cp postgres-14.tar.gz k3s-deploy/
+          cp product-service.tar.gz k3s-deploy/
+          cp product-db.tar.gz k3s-deploy/
           cp docker-compose.yml k3s-deploy/
           
           # 创建部署脚本
@@ -101,13 +101,13 @@ jobs:
           # 加载Docker镜像到K3s
           echo "加载Docker镜像..."
           echo "导入ProductService后端镜像..."
-          k3s ctr images import productservice-backend.tar.gz
+          sudo k3s ctr images import product-service.tar.gz
           echo "导入PostgreSQL数据库镜像..."
-          k3s ctr images import postgres-14.tar.gz
+          sudo k3s ctr images import product-db.tar.gz
           
           # 验证镜像导入
           echo "验证镜像导入..."
-          k3s ctr images list | grep -E "(productservice-backend|postgres)"
+          sudo k3s ctr images list | grep -E "(productservice-backend|postgres)"
           
           # 应用K8s配置
           echo "应用K8s配置..."
