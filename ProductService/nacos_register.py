@@ -16,17 +16,23 @@ def register_to_nacos():
         # Nacos 配置
         nacos_server = os.getenv('NACOS_SERVER', '123.57.145.79:8848')
         service_name = 'ProductService'
-        service_port = int(os.getenv('SERVICE_PORT', '8000'))
         environment = os.getenv('ENVIRONMENT', 'development')
         
-        # 获取本机IP - 在容器环境中需要获取容器的外部可访问IP
-        hostname = socket.gethostname()
-        service_ip = socket.gethostbyname(hostname)
+        print(f"🌍 Current environment: {environment}")
         
-        # 如果是生产环境，尝试获取公网IP或配置的IP
+        # 获取容器IP
+        hostname = socket.gethostname()
+        container_ip = socket.gethostbyname(hostname)
+        
+        # 在Kubernetes环境中，其他服务需要通过NodePort或者集群IP访问
         if environment == 'production':
-            # 可以通过环境变量指定服务IP
-            service_ip = os.getenv('SERVICE_IP', service_ip)
+            # 生产环境：优先使用环境变量指定的服务IP，否则使用服务器公网IP
+            service_ip = os.getenv('SERVICE_IP', '101.132.163.45')  # 默认使用服务器公网IP
+            # 在K8s中，外部访问使用NodePort端口
+            service_port = int(os.getenv('NODE_PORT', '30800'))
+        else:
+            # 开发环境：使用容器IP
+            service_ip = container_ip
         
         print(f"🔄 Connecting to Nacos server: {nacos_server}")
         print(f"🔄 Service will be registered as: {service_ip}:{service_port}")
