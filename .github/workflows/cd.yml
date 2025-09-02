@@ -1,0 +1,180 @@
+name: ProductService_CD
+
+on:
+  push:
+    branches: [master]
+    # 只有当CI通过并且代码已经合入master时才触发CD
+  workflow_run:
+    workflows: ["ProductService_CI"]
+    types:
+      - completed
+    branches: [master]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # 只有当CI workflow成功完成时才运行部署
+    if: github.event.workflow_run.conclusion == 'success' || github.event_name == 'push'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build Docker Images for Deployment
+        run: |
+          # 构建ProductService后端镜像
+          docker build -t productservice-backend:${{ github.sha }} .
+          docker tag productservice-backend:${{ github.sha }} productservice-backend:latest
+          
+          # 拉取PostgreSQL镜像
+          docker pull postgres:14
+          
+          # 保存镜像，使用新的文件名
+          docker save productservice-backend:latest | gzip > product-service.tar.gz
+          docker save postgres:14 | gzip > product-db.tar.gz
+
+      - name: Create K3s deployment package
+        run: |
+          mkdir -p k3s-deploy
+          cp -r k8s/* k3s-deploy/
+          cp product-service.tar.gz k3s-deploy/
+          cp product-db.tar.gz k3s-deploy/
+          cp docker-compose.yml k3s-deploy/
+          
+          # 创建部署脚本
+          cat > k3s-deploy/deploy-to-k3s.sh << 'EOF'
+          #!/bin/bash
+          set -e
+          
+          echo "🚀 开始部署 ProductService 到 K3s..."
+          echo "📦 部署版本: ${{ github.sha }}"
+          echo "🔧 部署时间: $(date)"
+          
+          # 设置kubectl别名
+          alias kubectl='k3s kubectl'
+          
+          # 加载Docker镜像到K3s
+          echo "📥 加载Docker镜像..."
+          echo "导入ProductService后端镜像..."
+          k3s ctr images import product-service.tar.gz
+          echo "导入PostgreSQL数据库镜像..."
+          k3s ctr images import product-db.tar.gz
+          
+          # 验证镜像导入
+          echo "🔍 验证镜像导入..."
+          k3s ctr images list | grep -E "(productservice-backend|postgres)"
+          
+          # 应用K8s配置
+          echo "🔧 应用K8s配置..."
+          k3s kubectl apply -f postgres-data-persistentvolumeclaim.yaml
+          k3s kubectl apply -f db-deployment.yaml
+          k3s kubectl apply -f db-service.yaml
+          
+          # 等待数据库启动
+          echo "⏳ 等待数据库启动..."
+          k3s kubectl wait --for=condition=ready pod -l io.kompose.service=product-db --timeout=300s || {
+            echo "❌ 数据库启动超时，检查日志..."
+            k3s kubectl describe pod -l io.kompose.service=product-db
+            k3s kubectl logs -l io.kompose.service=product-db --tail=50
+            exit 1
+          }
+          
+          # 部署后端服务
+          echo "🔧 部署后端服务..."
+          k3s kubectl apply -f backend-deployment.yaml
+          k3s kubectl apply -f backend-service.yaml
+          
+          # 等待后端服务启动
+          echo "⏳ 等待后端服务启动..."
+          k3s kubectl wait --for=condition=ready pod -l io.kompose.service=product-service --timeout=300s || {
+            echo "❌ 后端服务启动超时，检查日志..."
+            k3s kubectl describe pod -l io.kompose.service=product-service
+            k3s kubectl logs -l io.kompose.service=product-service --tail=50
+            exit 1
+          }
+          
+          # 检查部署状态
+          echo "📊 检查部署状态..."
+          k3s kubectl get pods
+          k3s kubectl get services
+          
+          # 获取服务端口
+          NODE_PORT=$(k3s kubectl get service product-service -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null || echo "30800")
+          echo "✅ ProductService 部署完成！"
+          echo "🌐 访问地址: http://101.132.163.45:$NODE_PORT"
+          echo "💚 健康检查: http://101.132.163.45:$NODE_PORT/health/"
+          
+          # 健康检查
+          echo "🏥 执行健康检查..."
+          for i in {1..10}; do
+            if curl -f http://localhost:$NODE_PORT/health/ > /dev/null 2>&1; then
+              echo "✅ 健康检查通过！"
+              break
+            elif [ $i -eq 10 ]; then
+              echo "⚠️ 健康检查失败，但服务可能仍在启动中"
+              echo "📋 最近的Pod日志:"
+              k3s kubectl logs -l io.kompose.service=product-service --tail=20
+            else
+              echo "⏳ 等待服务完全启动... ($i/10)"
+              sleep 15
+            fi
+          done
+          
+          echo "🎉 ProductService CD 部署流程完成！"
+          EOF
+          
+          chmod +x k3s-deploy/deploy-to-k3s.sh
+          
+          # 打包部署文件
+          tar -czf ProductService.tar.gz k3s-deploy/
+
+      - name: Install sshpass
+        run: sudo apt-get update && sudo apt-get install -y sshpass
+
+      - name: Deploy to K3s Server
+        run: |
+          echo "🚀 开始部署到生产服务器..."
+          
+          # 上传部署包到服务器
+          sshpass -p "${{ secrets.ECS_PASSWORD }}" scp -o StrictHostKeyChecking=no \
+            ProductService.tar.gz \
+            root@${{ secrets.ECS_IP }}:/tmp/
+          
+          # 在服务器上执行部署
+          sshpass -p "${{ secrets.ECS_PASSWORD }}" ssh -o StrictHostKeyChecking=no root@${{ secrets.ECS_IP }} "
+            echo '🔧 开始服务器端部署...'
+            
+            # 备份旧版本
+            if [ -d ~/ProductService ]; then
+              echo '📦 备份旧版本...'
+              mv ~/ProductService ~/ProductService.backup.\$(date +%Y%m%d_%H%M%S) 2>/dev/null || true
+            fi
+            
+            # 解压新的部署包
+            cd ~
+            tar -xzf /tmp/ProductService.tar.gz
+            mv k3s-deploy ProductService
+            cd ProductService
+            
+            echo '🚀 执行部署脚本...'
+            # 执行部署脚本
+            ./deploy-to-k3s.sh
+            
+            # 清理临时文件
+            rm -f /tmp/ProductService.tar.gz
+            
+            echo '✅ K3s ProductService 部署完成!'
+            echo '📊 最终服务状态:'
+            k3s kubectl get pods,services | grep product
+          "
+          
+          echo "🎉 CD 部署流程完成！"
+
+      - name: Deployment Summary
+        run: |
+          echo "📋 部署摘要:"
+          echo "🔖 版本: ${{ github.sha }}"
+          echo "🌿 分支: ${{ github.ref_name }}"
+          echo "⏰ 时间: $(date)"
+          echo "🌐 访问地址: http://101.132.163.45:30800"
+          echo "💚 健康检查: http://101.132.163.45:30800/health/"

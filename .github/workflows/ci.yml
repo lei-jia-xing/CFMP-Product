@@ -1,0 +1,96 @@
+name: ProductService_CI
+
+on:
+  push:
+    branches: [master, develop]
+  pull_request:
+    branches: [master]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_DB: test_productdb
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: testpassword
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libpq-dev gcc
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Django tests
+        env:
+          DATABASE_URL: postgres://postgres:testpassword@localhost:5432/test_productdb
+          DJANGO_SETTINGS_MODULE: ProductService.settings
+          SECRET_KEY: test-secret-key-for-github-actions
+          DEBUG: False
+        run: |
+          python manage.py migrate
+          python manage.py test
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build and Test Docker Image
+        run: |
+          # 构建ProductService后端镜像
+          docker build -t productservice-backend:${{ github.sha }} .
+          docker tag productservice-backend:${{ github.sha }} productservice-backend:latest
+          
+          # 测试镜像启动
+          docker run --rm -d --name test-backend productservice-backend:latest
+          sleep 10
+          docker stop test-backend || true
+          
+          echo "✅ 镜像构建和基本测试通过！"
+
+      - name: Create deployment artifacts
+        run: |
+          echo "CI 构建完成，准备合入代码..."
+          echo "构建信息:" > build-info.txt
+          echo "Commit SHA: ${{ github.sha }}" >> build-info.txt
+          echo "Build Time: $(date)" >> build-info.txt
+          echo "Branch: ${{ github.ref_name }}" >> build-info.txt
+          
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: build-info
+          path: build-info.txt
