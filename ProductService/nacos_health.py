@@ -9,7 +9,7 @@ import threading
 import logging
 from nacos import NacosClient
 
-logging.basicConfig(level=logging.WARNING)
+logging.basicConfig(level=logging.warning)
 logger = logging.getLogger(__name__)
 
 
