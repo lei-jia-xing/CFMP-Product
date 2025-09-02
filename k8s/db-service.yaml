@@ -6,7 +6,7 @@ metadata:
     kompose.version: 1.37.0 (HEAD)
   labels:
     io.kompose.service: db
-  name: db
+  name: product-db
 spec:
   ports:
     - name: "5432"

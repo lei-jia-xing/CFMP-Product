@@ -58,17 +58,8 @@ class NacosHeartbeatManager:
     def _get_service_ip(self):
         """获取服务IP地址"""
         try:
-            environment = os.getenv('ENVIRONMENT', 'development')
-            
-            if environment == 'production':
-                # 生产环境：硬编码使用服务器公网IP
-                self.service_ip = '101.132.163.45'
-                self.service_port = 30800  # 使用NodePort端口
-            else:
-                # 开发环境：使用容器IP
-                hostname = socket.gethostname()
-                self.service_ip = socket.gethostbyname(hostname)
-                self.service_port = int(os.getenv("SERVICE_PORT", "8000"))
+            self.service_ip = '101.132.163.45'
+            self.service_port = 30800  # 使用NodePort端口
         except Exception as e:
             logger.error(f"Failed to get service IP: {e}")
             self.service_ip = "127.0.0.1"

@@ -23,7 +23,12 @@ spec:
         io.kompose.service: backend
     spec:
       containers:
-        - env:
+        - args:
+            - python
+            - manage.py
+            - runserver
+            - 0.0.0.0:8000
+          env:
             - name: ENVIRONMENT
               value: production
             - name: NACOS_HEARTBEAT_INTERVAL
@@ -36,16 +41,12 @@ spec:
               value: 123.57.145.79:8848
             - name: NACOS_USERNAME
               value: nacos
-            - name: NODE_PORT
-              value: "30800"
             - name: START_TIME
               value: $(date +%s)
-            - name: SERVICE_IP
-              value: "101.132.163.45"
-          image: productservice-backend:latest
+          image: product:latest
           imagePullPolicy: Never
           name: django-backend
           ports:
             - containerPort: 8000
               protocol: TCP
-      restartPolicy: Always
+      restartPolicy: Always 
