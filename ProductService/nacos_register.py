@@ -25,11 +25,14 @@ def register_to_nacos():
         container_ip = socket.gethostbyname(hostname)
         
         # 在Kubernetes环境中，其他服务需要通过NodePort或者集群IP访问
-        
+        if environment == 'production':
             # 生产环境：硬编码使用服务器公网IP和NodePort
-        service_ip = '101.132.163.45'  # 硬编码服务器公网IP
-        service_port = 30800  # 硬编码NodePort端口
-       
+            service_ip = '101.132.163.45'  # 硬编码服务器公网IP
+            service_port = 30800  # 硬编码NodePort端口
+        else:
+            # 开发环境：使用容器IP
+            service_ip = container_ip
+            service_port = int(os.getenv('SERVICE_PORT', '8000'))
         
         print(f"🔄 Connecting to Nacos server: {nacos_server}")
         print(f"🔄 Service will be registered as: {service_ip}:{service_port}")
