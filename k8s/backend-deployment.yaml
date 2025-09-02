@@ -37,9 +37,11 @@ spec:
             - name: NACOS_USERNAME
               value: nacos
             - name: SERVICE_PORT
-              value: "8000"
+              value: "30800"
             - name: START_TIME
               value: $(date +%s)
+            - name: SERVICE_IP
+              value: "101.132.163.45"
           image: productservice-backend:latest
           imagePullPolicy: Never
           name: django-backend
