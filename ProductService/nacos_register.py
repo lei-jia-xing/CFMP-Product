@@ -67,7 +67,7 @@ def register_to_nacos():
                 )
             else:
                 raise auth_error
-        
+
         print(f"🔄 Registering service: {service_name} at {service_ip}:{service_port}")
         
         # 注册服务 - 添加健康检查端点信息
