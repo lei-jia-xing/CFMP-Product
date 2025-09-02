@@ -95,7 +95,7 @@ jobs:
           
           # 加载Docker镜像到K3s
           echo "加载Docker镜像..."
-          sudo k3s ctr images import productservice-backend.tar.gz
+          k3s ctr images import productservice-backend.tar.gz
           
           # 应用K8s配置
           echo "应用K8s配置..."
