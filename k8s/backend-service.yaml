@@ -6,7 +6,7 @@ metadata:
     kompose.version: 1.37.0 (HEAD)
   labels:
     io.kompose.service: backend
-  name: backend
+  name: product-service
 spec:
   type: NodePort
   ports:

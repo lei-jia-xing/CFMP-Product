@@ -36,7 +36,7 @@ spec:
               value: 123.57.145.79:8848
             - name: NACOS_USERNAME
               value: nacos
-            - name: SERVICE_PORT
+            - name: NODE_PORT
               value: "30800"
             - name: START_TIME
               value: $(date +%s)

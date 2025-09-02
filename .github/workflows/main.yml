@@ -144,7 +144,7 @@ jobs:
           k3s kubectl get services
           
           # 获取服务端口
-          NODE_PORT=$(k3s kubectl get service backend -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null || echo "30800")
+          NODE_PORT=$(k3s kubectl get service product-service -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null || echo "30800")
           echo "ProductService 部署完成！"
           echo "访问地址: http://localhost:$NODE_PORT"
           echo "健康检查: http://localhost:$NODE_PORT/health/"

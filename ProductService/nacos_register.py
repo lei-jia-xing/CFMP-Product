@@ -33,6 +33,7 @@ def register_to_nacos():
         else:
             # 开发环境：使用容器IP
             service_ip = container_ip
+            service_port = int(os.getenv('SERVICE_PORT', '8000'))
         
         print(f"🔄 Connecting to Nacos server: {nacos_server}")
         print(f"🔄 Service will be registered as: {service_ip}:{service_port}")
