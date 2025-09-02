@@ -101,13 +101,13 @@ jobs:
           # 加载Docker镜像到K3s
           echo "加载Docker镜像..."
           echo "导入ProductService后端镜像..."
-          sudo k3s ctr images import productservice-backend.tar.gz
+          k3s ctr images import productservice-backend.tar.gz
           echo "导入PostgreSQL数据库镜像..."
-          sudo k3s ctr images import postgres-14.tar.gz
+          k3s ctr images import postgres-14.tar.gz
           
           # 验证镜像导入
           echo "验证镜像导入..."
-          sudo k3s ctr images list | grep -E "(productservice-backend|postgres)"
+          k3s ctr images list | grep -E "(productservice-backend|postgres)"
           
           # 应用K8s配置
           echo "应用K8s配置..."
