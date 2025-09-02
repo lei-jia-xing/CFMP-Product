@@ -26,10 +26,9 @@ def register_to_nacos():
         
         # 在Kubernetes环境中，其他服务需要通过NodePort或者集群IP访问
         if environment == 'production':
-            # 生产环境：优先使用环境变量指定的服务IP，否则使用服务器公网IP
-            service_ip = os.getenv('SERVICE_IP', '101.132.163.45')  # 默认使用服务器公网IP
-            # 在K8s中，外部访问使用NodePort端口
-            service_port = int(os.getenv('NODE_PORT', '30800'))
+            # 生产环境：硬编码使用服务器公网IP和NodePort
+            service_ip = '101.132.163.45'  # 硬编码服务器公网IP
+            service_port = 30800  # 硬编码NodePort端口
         else:
             # 开发环境：使用容器IP
             service_ip = container_ip
