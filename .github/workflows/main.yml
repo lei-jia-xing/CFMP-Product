@@ -102,7 +102,7 @@ jobs:
           echo "加载Docker镜像..."
           echo "导入ProductService后端镜像..."
           k3s ctr images import product-service.tar.gz
-          "导入PostgreSQL数据库镜像..."
+          # "导入PostgreSQL数据库镜像..."
           k3s ctr images import product-db.tar.gz
           
           # 验证镜像导入
