@@ -1,5 +1,5 @@
 services:
-  db:
+  product-db:
     image: postgres:14
     container_name: postgres_db
     environment:
@@ -13,7 +13,7 @@ services:
     networks:
       - app-network
 
-  backend:
+  product-service:
     image: productservice-backend:latest
     container_name: django_backend
     command: python manage.py runserver 0.0.0.0:8000
@@ -22,7 +22,7 @@ services:
     ports:
       - "8000:8000"
     depends_on:
-      - db
+      - product-db
     environment:
       - NACOS_SERVER=123.57.145.79:8848
       - ENVIRONMENT=production

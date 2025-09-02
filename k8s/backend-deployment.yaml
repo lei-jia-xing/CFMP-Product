@@ -5,13 +5,13 @@ metadata:
     kompose.cmd: kompose convert -f docker-compose.yml -o k8s/
     kompose.version: 1.37.0 (HEAD)
   labels:
-    io.kompose.service: backend
+    io.kompose.service: product-service
   name: product-service
 spec:
   replicas: 1
   selector:
     matchLabels:
-      io.kompose.service: backend
+      io.kompose.service: product-service
   strategy:
     type: Recreate
   template:
@@ -20,7 +20,7 @@ spec:
         kompose.cmd: kompose convert -f docker-compose.yml -o k8s/
         kompose.version: 1.37.0 (HEAD)
       labels:
-        io.kompose.service: backend
+        io.kompose.service: product-service
     spec:
       containers:
         - args:

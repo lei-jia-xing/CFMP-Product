@@ -26,7 +26,7 @@ SECRET_KEY = "django-insecure-565-6ko$^!m$6e9=^n!w8-cuwv_q#2p6k9mi(m#akti)s7f4@@
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['*']
 
 
 # Application definition
@@ -88,7 +88,7 @@ else:
             "NAME": "productdb",
             "USER": "postgres",
             "PASSWORD": "password",
-            "HOST": "db",  # 使用 docker-compose 服务名
+            "HOST": "product-db",  # 统一使用 product-db 服务名
             "PORT": "5432",
         }
     }

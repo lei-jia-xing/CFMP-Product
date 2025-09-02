@@ -5,7 +5,7 @@ metadata:
     kompose.cmd: kompose convert -f docker-compose.yml -o k8s/
     kompose.version: 1.37.0 (HEAD)
   labels:
-    io.kompose.service: db
+    io.kompose.service: product-db
   name: product-db
 spec:
   ports:
@@ -13,4 +13,4 @@ spec:
       port: 5432
       targetPort: 5432
   selector:
-    io.kompose.service: db
+    io.kompose.service: product-db
