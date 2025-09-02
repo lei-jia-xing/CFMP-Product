@@ -22,16 +22,21 @@ jobs:
 
       - name: Build Docker Images for Deployment
         run: |
-          # 构建ProductService后端镜像
-          docker build -t productservice-backend:${{ github.sha }} .
+          echo "🔨 强制重新构建ProductService镜像..."
+          # 构建ProductService后端镜像，使用commit SHA作为唯一标签
+          docker build --no-cache -t productservice-backend:${{ github.sha }} .
           docker tag productservice-backend:${{ github.sha }} productservice-backend:latest
           
+          echo "📥 拉取PostgreSQL镜像..."
           # 拉取PostgreSQL镜像
           docker pull postgres:14
           
+          echo "💾 保存镜像文件..."
           # 保存镜像，使用新的文件名
           docker save productservice-backend:latest | gzip > product-service.tar.gz
           docker save postgres:14 | gzip > product-db.tar.gz
+          
+          echo "✅ 镜像构建完成，版本: ${{ github.sha }}"
 
       - name: Create K3s deployment package
         run: |
@@ -55,6 +60,11 @@ jobs:
           
           # 加载Docker镜像到K3s
           echo "📥 加载Docker镜像..."
+          
+          # 先删除旧镜像（如果存在）
+          echo "🗑️ 清理旧镜像..."
+          k3s ctr images rm docker.io/library/productservice-backend:latest 2>/dev/null || true
+          
           echo "导入ProductService后端镜像..."
           k3s ctr images import product-service.tar.gz
           echo "导入PostgreSQL数据库镜像..."
@@ -81,6 +91,17 @@ jobs:
           
           # 部署后端服务
           echo "🔧 部署后端服务..."
+          
+          # 先删除旧的部署（强制更新）
+          echo "🔄 强制更新部署..."
+          k3s kubectl delete deployment product-service 2>/dev/null || true
+          k3s kubectl delete pods -l io.kompose.service=product-service 2>/dev/null || true
+          
+          # 等待旧Pod完全删除
+          echo "⏳ 等待旧Pod清理..."
+          k3s kubectl wait --for=delete pod -l io.kompose.service=product-service --timeout=60s || true
+          
+          # 部署新版本
           k3s kubectl apply -f backend-deployment.yaml
           k3s kubectl apply -f backend-service.yaml
           
