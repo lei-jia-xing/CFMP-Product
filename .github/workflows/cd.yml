@@ -26,11 +26,11 @@ jobs:
           # 构建ProductService后端镜像，使用commit SHA作为唯一标签
           docker build --no-cache -t productservice-backend:${{ github.sha }} .
           docker tag productservice-backend:${{ github.sha }} productservice-backend:latest
-          
+
           echo " 保存应用镜像文件..."
           # 只保存应用镜像，数据库镜像在服务器端处理
           docker save productservice-backend:latest | gzip > product-service.tar.gz
-          
+
           echo "✅ 应用镜像构建完成，版本: ${{ github.sha }}"
 
       - name: Create K3s deployment package
@@ -39,19 +39,19 @@ jobs:
           cp -r k8s/* k3s-deploy/
           cp product-service.tar.gz k3s-deploy/
           cp docker-compose.yml k3s-deploy/
-          
+
           # 创建部署脚本
           cat > k3s-deploy/deploy-to-k3s.sh << 'EOF'
           #!/bin/bash
           set -e
-          
+
           echo "🚀 开始部署 ProductService 到 K3s..."
           echo "📦 部署版本: ${{ github.sha }}"
           echo "🔧 部署时间: $(date)"
-          
+
           # 设置kubectl别名
           alias kubectl='k3s kubectl'
-          
+
           # 确保PostgreSQL镜像存在（首次部署或按需拉取）
           echo "🔍 检查PostgreSQL镜像..."
           if ! k3s ctr images list | grep -q "docker.io/library/postgres:14"; then
@@ -60,31 +60,32 @@ jobs:
           else
             echo "✅ PostgreSQL镜像已存在，跳过拉取"
           fi
-          
+
           # 加载应用镜像到K3s
           echo "📥 加载应用镜像..."
-          
+
           # 先删除旧的应用镜像（如果存在）
           echo "🗑️ 清理旧的应用镜像..."
           k3s ctr images rm docker.io/library/productservice-backend:latest 2>/dev/null || true
-          
+
           echo "导入ProductService后端镜像..."
           k3s ctr images import product-service.tar.gz
-          
+
           # 验证镜像导入
           echo "🔍 验证镜像导入..."
           k3s ctr images list | grep -E "(productservice-backend|postgres)"
-          
+
           # 在镜像导入后kill掉现有的product-service pod以强制重新拉取新镜像
           echo "🔄 强制重启product-service pod以使用新镜像..."
           k3s kubectl delete pods -l io.kompose.service=product-service --ignore-not-found=true
-          
+
           # 应用K8s配置
           echo "🔧 应用K8s配置..."
           k3s kubectl apply -f postgres-data-persistentvolumeclaim.yaml
           k3s kubectl apply -f db-deployment.yaml
           k3s kubectl apply -f db-service.yaml
-          
+          k3s kubectl apply -f HPA.yaml
+
           # 等待数据库启动
           echo "⏳ 等待数据库启动..."
           k3s kubectl wait --for=condition=ready pod -l io.kompose.service=product-db --timeout=300s || {
@@ -93,23 +94,23 @@ jobs:
             k3s kubectl logs -l io.kompose.service=product-db --tail=50
             exit 1
           }
-          
+
           # 部署后端服务
           echo "🔧 部署后端服务..."
-          
+
           # 先删除旧的部署（强制更新）
           echo "🔄 强制更新部署..."
           k3s kubectl delete deployment product-service 2>/dev/null || true
           k3s kubectl delete pods -l io.kompose.service=product-service 2>/dev/null || true
-          
+
           # 等待旧Pod完全删除
           echo "⏳ 等待旧Pod清理..."
           k3s kubectl wait --for=delete pod -l io.kompose.service=product-service --timeout=60s || true
-          
+
           # 部署新版本
           k3s kubectl apply -f backend-deployment.yaml
           k3s kubectl apply -f backend-service.yaml
-          
+
           # 等待后端服务启动
           echo "⏳ 等待后端服务启动..."
           k3s kubectl wait --for=condition=ready pod -l io.kompose.service=product-service --timeout=300s || {
@@ -118,18 +119,18 @@ jobs:
             k3s kubectl logs -l io.kompose.service=product-service --tail=50
             exit 1
           }
-          
+
           # 检查部署状态
           echo "📊 检查部署状态..."
           k3s kubectl get pods
           k3s kubectl get services
-          
+
           # 获取服务端口
           NODE_PORT=$(k3s kubectl get service product-service -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null || echo "30800")
           echo "✅ ProductService 部署完成！"
           echo "🌐 访问地址: http://101.132.163.45:$NODE_PORT"
           echo "💚 健康检查: http://101.132.163.45:$NODE_PORT/health/"
-          
+
           # 健康检查
           echo "🏥 执行健康检查..."
           for i in {1..10}; do
@@ -145,12 +146,12 @@ jobs:
               sleep 15
             fi
           done
-          
+
           echo "🎉 ProductService CD 部署流程完成！"
           EOF
-          
+
           chmod +x k3s-deploy/deploy-to-k3s.sh
-          
+
           # 打包部署文件
           tar -czf ProductService.tar.gz k3s-deploy/
 
@@ -160,12 +161,12 @@ jobs:
       - name: Deploy to K3s Server
         run: |
           echo "🚀 开始部署到生产服务器..."
-          
+
           # 上传部署包到服务器
           sshpass -p "${{ secrets.ECS_PASSWORD }}" scp -o StrictHostKeyChecking=no \
             ProductService.tar.gz \
             root@${{ secrets.ECS_IP }}:/tmp/
-          
+
           # 在服务器上执行部署
           sshpass -p "${{ secrets.ECS_PASSWORD }}" ssh -o StrictHostKeyChecking=no root@${{ secrets.ECS_IP }} "
             echo '🔧 开始服务器端部署...'
@@ -188,7 +189,7 @@ jobs:
             echo '📊 最终服务状态:'
             k3s kubectl get pods,services | grep product
           "
-          
+
           echo "🎉 CD 部署流程完成！"
 
       - name: Deployment Summary
