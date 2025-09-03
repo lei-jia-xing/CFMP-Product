@@ -348,7 +348,7 @@ class ProductDetailAPIView(RetrieveUpdateDestroyAPIView):
 
     def perform_update(self, serializer):
         # 保存商品基本信息
-        product = serializer.save(status=3)
+        product = serializer.save()
 
         # 处理分类
         if "categories" in self.request.data:

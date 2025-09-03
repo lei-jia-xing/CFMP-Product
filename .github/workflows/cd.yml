@@ -84,7 +84,6 @@ jobs:
           k3s kubectl apply -f postgres-data-persistentvolumeclaim.yaml
           k3s kubectl apply -f db-deployment.yaml
           k3s kubectl apply -f db-service.yaml
-          k3s kubectl apply -f HPA.yaml
 
           # 等待数据库启动
           echo "⏳ 等待数据库启动..."
@@ -110,6 +109,10 @@ jobs:
           # 部署新版本
           k3s kubectl apply -f backend-deployment.yaml
           k3s kubectl apply -f backend-service.yaml
+          
+          # 部署HPA（需要在Deployment存在后）
+          echo "🔧 部署HPA自动扩缩容..."
+          k3s kubectl apply -f HPA.yaml
 
           # 等待后端服务启动
           echo "⏳ 等待后端服务启动..."
@@ -124,6 +127,11 @@ jobs:
           echo "📊 检查部署状态..."
           k3s kubectl get pods
           k3s kubectl get services
+          k3s kubectl get hpa
+          
+          # 验证HPA状态
+          echo "🔍 验证HPA状态..."
+          k3s kubectl describe hpa product-service-hpa || echo "⚠️ HPA描述失败，可能需要时间初始化"
 
           # 获取服务端口
           NODE_PORT=$(k3s kubectl get service product-service -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null || echo "30800")
