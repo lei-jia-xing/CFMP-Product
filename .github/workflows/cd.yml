@@ -82,7 +82,16 @@ jobs:
           # 应用K8s配置
           echo "🔧 应用K8s配置..."
           k3s kubectl apply -f postgres-data-persistentvolumeclaim.yaml
-          k3s kubectl apply -f db-deployment.yaml
+          
+          # 处理数据库部署的selector不可变问题
+          echo "🔧 部署数据库服务..."
+          if ! k3s kubectl apply -f db-deployment.yaml; then
+            echo "⚠️ 数据库部署更新失败，尝试重新创建..."
+            k3s kubectl delete deployment product-db 2>/dev/null || true
+            sleep 5
+            k3s kubectl apply -f db-deployment.yaml
+          fi
+          
           k3s kubectl apply -f db-service.yaml
 
           # 等待数据库启动
@@ -96,13 +105,11 @@ jobs:
 
           # 部署后端服务
           echo "🔧 部署后端服务..."
-
-          # 先删除旧的部署（强制更新）
+          
+          # 先删除旧的部署（强制更新，避免selector不可变问题）
           echo "🔄 强制更新部署..."
           k3s kubectl delete deployment product-service 2>/dev/null || true
-          k3s kubectl delete pods -l io.kompose.service=product-service 2>/dev/null || true
-
-          # 等待旧Pod完全删除
+          k3s kubectl delete pods -l io.kompose.service=product-service 2>/dev/null || true          # 等待旧Pod完全删除
           echo "⏳ 等待旧Pod清理..."
           k3s kubectl wait --for=delete pod -l io.kompose.service=product-service --timeout=60s || true
 
@@ -218,6 +225,8 @@ jobs:
             
             # 解压新的部署包
             cd ~
+            # 先清理旧目录
+            rm -rf ProductService
             tar -xzf /tmp/ProductService.tar.gz
             mv k3s-deploy ProductService
             cd ProductService
@@ -231,7 +240,14 @@ jobs:
             
             echo '✅ K3s ProductService 部署完成!'
             echo '📊 最终服务状态:'
-            k3s kubectl get pods,services | grep product
+            echo '📋 Pods:'
+            k3s kubectl get pods | grep product
+            echo '📋 Services:'
+            k3s kubectl get services | grep product
+            echo '📋 HPA:'
+            k3s kubectl get hpa | grep product || echo 'HPA未配置或未就绪'
+            echo '📋 所有NodePort服务:'
+            k3s kubectl get services --field-selector spec.type=NodePort -o wide
           "
 
           echo "🎉 CD 部署流程完成！"
