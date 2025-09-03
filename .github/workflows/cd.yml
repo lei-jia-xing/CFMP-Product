@@ -75,6 +75,10 @@ jobs:
           echo "🔍 验证镜像导入..."
           k3s ctr images list | grep -E "(productservice-backend|postgres)"
           
+          # 在镜像导入后kill掉现有的product-service pod以强制重新拉取新镜像
+          echo "🔄 强制重启product-service pod以使用新镜像..."
+          k3s kubectl delete pods -l io.kompose.service=product-service --ignore-not-found=true
+          
           # 应用K8s配置
           echo "🔧 应用K8s配置..."
           k3s kubectl apply -f postgres-data-persistentvolumeclaim.yaml
@@ -165,12 +169,7 @@ jobs:
           # 在服务器上执行部署
           sshpass -p "${{ secrets.ECS_PASSWORD }}" ssh -o StrictHostKeyChecking=no root@${{ secrets.ECS_IP }} "
             echo '🔧 开始服务器端部署...'
-            
-            # 备份旧版本
-            if [ -d ~/ProductService ]; then
-              echo '📦 备份旧版本...'
-              mv ~/ProductService ~/ProductService.backup.\$(date +%Y%m%d_%H%M%S) 2>/dev/null || true
-            fi
+
             
             # 解压新的部署包
             cd ~
