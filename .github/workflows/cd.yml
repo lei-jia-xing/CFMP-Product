@@ -107,8 +107,36 @@ jobs:
           k3s kubectl wait --for=delete pod -l io.kompose.service=product-service --timeout=60s || true
 
           # 部署新版本
+          echo "🔧 部署后端Deployment..."
           k3s kubectl apply -f backend-deployment.yaml
-          k3s kubectl apply -f backend-service.yaml
+          
+          echo "🔧 部署后端Service..."
+          # 检查端口是否被占用
+          echo "🔍 检查NodePort 30800是否被占用..."
+          k3s kubectl get services --all-namespaces -o wide | grep 30800 && echo "⚠️ 端口30800已被占用" || echo "✅ 端口30800可用"
+          
+          k3s kubectl apply -f backend-service.yaml || {
+            echo "❌ Service部署失败，检查详情..."
+            k3s kubectl describe service product-service || echo "Service不存在"
+            exit 1
+          }
+          
+          # 验证Service是否创建成功
+          echo "🔍 验证Service创建..."
+          sleep 2  # 等待Service创建完成
+          if k3s kubectl get service product-service > /dev/null 2>&1; then
+            echo "✅ product-service Service创建成功"
+            k3s kubectl get service product-service -o wide
+            echo "🔍 检查Service端点..."
+            k3s kubectl get endpoints product-service || echo "⚠️ 端点未就绪"
+          else
+            echo "❌ product-service Service创建失败"
+            echo "📋 当前所有Services:"
+            k3s kubectl get services -o wide
+            echo "📋 检查Service创建事件:"
+            k3s kubectl get events --field-selector involvedObject.kind=Service --sort-by='.lastTimestamp' | tail -10
+            exit 1
+          fi
           
           # 部署HPA（需要在Deployment存在后）
           echo "🔧 部署HPA自动扩缩容..."
@@ -126,9 +154,14 @@ jobs:
 
           # 检查部署状态
           echo "📊 检查部署状态..."
+          echo "📋 Pods状态:"
           k3s kubectl get pods
-          k3s kubectl get services
+          echo "📋 Services状态:"
+          k3s kubectl get services -o wide
+          echo "📋 HPA状态:"
           k3s kubectl get hpa
+          echo "📋 NodePort服务详情:"
+          k3s kubectl get services --field-selector spec.type=NodePort -o wide
           
           # 验证HPA状态
           echo "🔍 验证HPA状态..."
