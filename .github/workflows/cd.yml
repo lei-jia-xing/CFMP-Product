@@ -27,23 +27,17 @@ jobs:
           docker build --no-cache -t productservice-backend:${{ github.sha }} .
           docker tag productservice-backend:${{ github.sha }} productservice-backend:latest
           
-          echo "📥 拉取PostgreSQL镜像..."
-          # 拉取PostgreSQL镜像
-          docker pull postgres:14
-          
-          echo "💾 保存镜像文件..."
-          # 保存镜像，使用新的文件名
+          echo " 保存应用镜像文件..."
+          # 只保存应用镜像，数据库镜像在服务器端处理
           docker save productservice-backend:latest | gzip > product-service.tar.gz
-          docker save postgres:14 | gzip > product-db.tar.gz
           
-          echo "✅ 镜像构建完成，版本: ${{ github.sha }}"
+          echo "✅ 应用镜像构建完成，版本: ${{ github.sha }}"
 
       - name: Create K3s deployment package
         run: |
           mkdir -p k3s-deploy
           cp -r k8s/* k3s-deploy/
           cp product-service.tar.gz k3s-deploy/
-          cp product-db.tar.gz k3s-deploy/
           cp docker-compose.yml k3s-deploy/
           
           # 创建部署脚本
@@ -58,17 +52,24 @@ jobs:
           # 设置kubectl别名
           alias kubectl='k3s kubectl'
           
-          # 加载Docker镜像到K3s
-          echo "📥 加载Docker镜像..."
+          # 确保PostgreSQL镜像存在（首次部署或按需拉取）
+          echo "🔍 检查PostgreSQL镜像..."
+          if ! k3s ctr images list | grep -q "docker.io/library/postgres:14"; then
+            echo "📥 拉取PostgreSQL镜像..."
+            k3s ctr images pull docker.io/library/postgres:14
+          else
+            echo "✅ PostgreSQL镜像已存在，跳过拉取"
+          fi
           
-          # 先删除旧镜像（如果存在）
-          echo "🗑️ 清理旧镜像..."
+          # 加载应用镜像到K3s
+          echo "📥 加载应用镜像..."
+          
+          # 先删除旧的应用镜像（如果存在）
+          echo "🗑️ 清理旧的应用镜像..."
           k3s ctr images rm docker.io/library/productservice-backend:latest 2>/dev/null || true
           
           echo "导入ProductService后端镜像..."
           k3s ctr images import product-service.tar.gz
-          echo "导入PostgreSQL数据库镜像..."
-          k3s ctr images import product-db.tar.gz
           
           # 验证镜像导入
           echo "🔍 验证镜像导入..."

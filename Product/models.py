@@ -1,5 +1,6 @@
 from django.db import models
 from minio_storage import MinioMediaStorage
+import uuid
 # Product数据表：Product, ProductMedia, Category, ProductReview, Collection
 
 
@@ -34,7 +35,7 @@ class Product(models.Model):
         (1, "自提"),
     ]
 
-    product_id = models.UUIDField(primary_key=True)
+    product_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     # FIX:
     # 高耦合，改成事件通知
     user_id = models.UUIDField()
