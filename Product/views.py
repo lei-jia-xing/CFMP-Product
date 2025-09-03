@@ -582,7 +582,7 @@ class ProductPublishListAPIView(ListAPIView):
     filterset_class = ProductFilter
 
     def get_queryset(self):
-       current_user_id = self.request.headers.get('UUID')
+       current_user_id = self.request.query_params.get('user_id')
        return Product.objects.filter(user_id=current_user_id)
 
 
