@@ -114,6 +114,7 @@ jobs:
           echo "🔧 部署HPA自动扩缩容..."
           k3s kubectl apply -f HPA.yaml
 
+          
           # 等待后端服务启动
           echo "⏳ 等待后端服务启动..."
           k3s kubectl wait --for=condition=ready pod -l io.kompose.service=product-service --timeout=300s || {
@@ -132,7 +133,9 @@ jobs:
           # 验证HPA状态
           echo "🔍 验证HPA状态..."
           k3s kubectl describe hpa product-service-hpa || echo "⚠️ HPA描述失败，可能需要时间初始化"
-
+          # 等待HPA准备就绪
+          echo "等待HPA准备就绪..."
+          k3s kubectl wait --for=condition=established hpa/product-service-hpa --timeout=60s 2>/dev/null || true
           # 获取服务端口
           NODE_PORT=$(k3s kubectl get service product-service -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null || echo "30800")
           echo "✅ ProductService 部署完成！"
