@@ -10,6 +10,5 @@
 
 ## 复现说明
 
-push到github仓库会触发github action,自动开始CI/CD,由于服务器
-由于服务器连接不上外网，镜像采用打包scp导入的方式
+push到github仓库会触发github action,自动开始CI/CD,由于服务器连接不上外网，镜像采用打包scp导入的方式
 
